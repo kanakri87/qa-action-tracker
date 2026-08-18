@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Internal Quality Action Tracker dashboard">
+    <title>Internal Quality Action Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#main-content" aria-label="QualityCore dashboard home">
+          <span class="brand-mark" aria-hidden="true">QC</span>
+          <span><strong>QualityCore</strong><small>Operational Excellence</small></span>
+        </a>
+        <div class="header-title">
+          <p>Quality Management System</p>
+          <h1>Internal Quality Action Tracker</h1>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-content" class="page-shell">
+      <section class="intro" aria-labelledby="dashboard-heading">
+        <div>
+          <p class="eyebrow">Quality overview</p>
+          <h2 id="dashboard-heading">Action dashboard</h2>
+          <p>Monitor corrective actions, ownership, and delivery across the organization.</p>
+        </div>
+        <p class="as-of">Last refreshed <strong id="refresh-date"></strong></p>
+      </section>
+
+      <section class="summary-grid" aria-label="Action summary">
+        <article class="summary-card total-card"><span class="card-icon" aria-hidden="true">#</span><div><p>Total actions</p><strong id="total-count">0</strong><small>Visible records</small></div></article>
+        <article class="summary-card open-card"><span class="card-icon" aria-hidden="true">◷</span><div><p>Open actions</p><strong id="open-count">0</strong><small>Require attention</small></div></article>
+        <article class="summary-card overdue-card"><span class="card-icon" aria-hidden="true">!</span><div><p>Overdue</p><strong id="overdue-count">0</strong><small>Past target date</small></div></article>
+        <article class="summary-card complete-card"><span class="card-icon" aria-hidden="true">✓</span><div><p>Completed</p><strong id="completed-count">0</strong><small>Actions closed</small></div></article>
+      </section>
+
+      <section class="tracker-panel" aria-labelledby="action-register-heading">
+        <div class="panel-heading">
+          <div><h2 id="action-register-heading">Quality action register</h2><p id="record-count" aria-live="polite"></p></div>
+          <div class="panel-actions">
+            <button class="button button-primary" id="new-action-button" type="button"><span aria-hidden="true">＋</span> New Action</button>
+            <button class="button button-secondary" id="export-button" type="button">Export visible CSV</button>
+            <button class="button button-secondary" id="backup-button" type="button">Backup JSON</button>
+            <label class="button button-secondary import-label" for="import-input">Restore JSON</label>
+            <input class="sr-only" id="import-input" type="file" accept="application/json,.json">
+            <button class="button button-danger" id="reset-button" type="button">Reset demo data</button>
+          </div>
+        </div>
+
+        <form class="filter-bar" id="filter-form" role="search">
+          <div class="field search-field">
+            <label for="search-input">Search actions</label>
+            <div class="input-wrap"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Action, source, owner, keyword…" autocomplete="off"></div>
+          </div>
+          <div class="field">
+            <label for="department-filter">Department</label>
+            <select id="department-filter"><option value="">All departments</option></select>
+          </div>
+          <div class="field">
+            <label for="status-filter">Status</label>
+            <select id="status-filter"><option value="">All statuses</option></select>
+          </div>
+          <button class="button button-secondary" id="clear-button" type="button">Clear filters</button>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Internal quality actions and their current status</caption>
+            <thead><tr><th scope="col">Action</th><th scope="col">Source</th><th scope="col">Description</th><th scope="col">Department</th><th scope="col">Responsible person</th><th scope="col">Target date</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Last update</th><th scope="col">Controls</th></tr></thead>
+            <tbody id="action-body"></tbody>
+          </table>
+          <div class="empty-state" id="empty-state" hidden><span aria-hidden="true">⌕</span><h3>No actions found</h3><p>Try changing or clearing your filters.</p></div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="action-dialog" aria-labelledby="form-title">
+      <form id="action-form" method="dialog" novalidate>
+        <div class="dialog-header"><div><p class="eyebrow">Action record</p><h2 id="form-title">New quality action</h2></div><button class="icon-button" type="button" data-close aria-label="Close form">×</button></div>
+        <div class="form-error" id="form-error" role="alert" hidden></div>
+        <div class="action-form-grid">
+          <div class="field"><label for="action-number">Action number</label><input id="action-number" name="number" readonly aria-describedby="number-help"><small id="number-help">Generated automatically</small></div>
+          <div class="field"><label for="source">Source <span aria-hidden="true">*</span></label><select id="source" name="source" required></select></div>
+          <div class="field"><label for="source-reference">Source reference number</label><input id="source-reference" name="sourceReference" maxlength="60"></div>
+          <div class="field full-width"><label for="description">Action description <span aria-hidden="true">*</span></label><textarea id="description" name="description" required maxlength="600"></textarea></div>
+          <div class="field full-width"><label for="corrective-action">Required corrective action <span aria-hidden="true">*</span></label><textarea id="corrective-action" name="correctiveAction" required maxlength="600"></textarea></div>
+          <div class="field"><label for="department">Responsible department <span aria-hidden="true">*</span></label><input id="department" name="department" required maxlength="80"></div>
+          <div class="field"><label for="person">Responsible person <span aria-hidden="true">*</span></label><input id="person" name="person" required maxlength="80"></div>
+          <div class="field"><label for="target-date">Target date <span aria-hidden="true">*</span></label><input id="target-date" name="targetDate" type="date" required></div>
+          <div class="field"><label for="action-status">Status <span aria-hidden="true">*</span></label><select id="action-status" name="status" required></select></div>
+          <div class="field"><label for="priority">Priority <span aria-hidden="true">*</span></label><select id="priority" name="priority" required><option>High</option><option selected>Medium</option><option>Low</option></select></div>
+          <div class="field"><label for="last-update">Last update <span aria-hidden="true">*</span></label><input id="last-update" name="lastUpdate" type="date" required></div>
+          <div class="field full-width"><label for="remarks">Remarks or evidence reference</label><textarea id="remarks" name="remarks" maxlength="600"></textarea></div>
+          <div class="field full-width"><label for="effectiveness">Effectiveness verification</label><textarea id="effectiveness" name="effectiveness" maxlength="600"></textarea></div>
+          <div class="field"><label for="closure-date">Closure date</label><input id="closure-date" name="closureDate" type="date"></div>
+        </div>
+        <div class="dialog-actions"><button class="button button-secondary" type="button" data-close>Cancel</button><button class="button button-primary" type="submit">Save action</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="view-dialog" aria-labelledby="view-title">
+      <div class="dialog-header"><div><p class="eyebrow">Action details</p><h2 id="view-title"></h2></div><button class="icon-button" type="button" data-view-close aria-label="Close details">×</button></div>
+      <dl class="detail-grid" id="action-details"></dl>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-view-close>Close</button></div>
+    </dialog>
+
+    <footer><p>QualityCore QMS <span aria-hidden="true">•</span> Internal use only</p></footer>
+    <script src="app.js"></script>
+  </body>
+</html>
