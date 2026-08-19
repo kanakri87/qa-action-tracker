@@ -7,6 +7,20 @@ const STATUSES = ["Open", "In Progress", "Under Review", "On Hold", "Completed"]
 const PRIORITIES = ["High", "Medium", "Low"];
 const FIELDS = ["number", "source", "sourceReference", "description", "correctiveAction", "department", "person", "targetDate", "status", "priority", "lastUpdate", "remarks", "effectiveness", "closureDate"];
 const REQUIRED = ["source", "description", "correctiveAction", "department", "person", "targetDate", "status", "priority"];
+const CSV_HEADINGS = ["Action Number", "Source", "Source Reference Number", "Action Description", "Required Corrective Action", "Responsible Department", "Responsible Person", "Target Date", "Status", "Priority", "Last Update", "Remarks or Evidence Reference", "Effectiveness Verification", "Closure Date"];
+const CSV_REQUIRED_FIELDS = ["source", "description", "correctiveAction", "department", "person", "targetDate"];
+const CSV_HEADER_ALIASES = {
+  action: "number", actionno: "number", actionnumber: "number", number: "number",
+  source: "source", sourcereference: "sourceReference", sourcereferenceno: "sourceReference", sourcereferencenumber: "sourceReference", reference: "sourceReference",
+  description: "description", actiondescription: "description",
+  correctiveaction: "correctiveAction", requiredaction: "correctiveAction", requiredcorrectiveaction: "correctiveAction",
+  department: "department", responsibledepartment: "department",
+  owner: "person", person: "person", responsibleperson: "person",
+  targetdate: "targetDate", duedate: "targetDate", status: "status", priority: "priority", lastupdate: "lastUpdate", updatedate: "lastUpdate",
+  remarks: "remarks", evidence: "remarks", evidencereference: "remarks", remarksorevidencereference: "remarks",
+  effectiveness: "effectiveness", effectivenessverification: "effectiveness", closuredate: "closureDate", closeddate: "closureDate"
+};
+const STATUS_COLORS = { Open: "#4aa3df", "In Progress": "#f4b942", "Under Review": "#9b72cf", "On Hold": "#d77a35", Completed: "#42b883" };
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const shiftDate = (days) => { const date = new Date(); date.setHours(12, 0, 0, 0); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); };
 const currentYear = new Date().getFullYear();
@@ -22,7 +36,7 @@ const DEMO_ACTIONS = [
   demo(8, "EQM/ECAS", "Review fictional document access roles.", "Remove obsolete demo roles and document approval evidence.", "Information Systems", "Skyler Dawn", 70, "In Progress", "High")
 ];
 const elements = {
-  body: document.querySelector("#action-body"), search: document.querySelector("#search-input"), departmentFilter: document.querySelector("#department-filter"), statusFilter: document.querySelector("#status-filter"), clear: document.querySelector("#clear-button"), exportCsv: document.querySelector("#export-button"), backup: document.querySelector("#backup-button"), importInput: document.querySelector("#import-input"), reset: document.querySelector("#reset-button"), newAction: document.querySelector("#new-button"), empty: document.querySelector("#empty-state"), recordCount: document.querySelector("#record-count"), total: document.querySelector("#total-count"), open: document.querySelector("#open-count"), overdue: document.querySelector("#overdue-count"), completed: document.querySelector("#completed-count"), message: document.querySelector("#message"), actionDialog: document.querySelector("#action-dialog"), actionForm: document.querySelector("#action-form"), formTitle: document.querySelector("#form-title"), formClose: document.querySelector("#form-close"), formCancel: document.querySelector("#form-cancel"), viewDialog: document.querySelector("#view-dialog"), viewTitle: document.querySelector("#view-title"), detailList: document.querySelector("#detail-list"), viewClose: document.querySelector("#view-close"), viewDone: document.querySelector("#view-done")
+  body: document.querySelector("#action-body"), search: document.querySelector("#search-input"), departmentFilter: document.querySelector("#department-filter"), statusFilter: document.querySelector("#status-filter"), clear: document.querySelector("#clear-button"), exportCsv: document.querySelector("#export-button"), csvImport: document.querySelector("#csv-import-input"), backup: document.querySelector("#backup-button"), importInput: document.querySelector("#import-input"), reset: document.querySelector("#reset-button"), newAction: document.querySelector("#new-button"), empty: document.querySelector("#empty-state"), recordCount: document.querySelector("#record-count"), total: document.querySelector("#total-count"), open: document.querySelector("#open-count"), overdue: document.querySelector("#overdue-count"), completed: document.querySelector("#completed-count"), message: document.querySelector("#message"), actionDialog: document.querySelector("#action-dialog"), actionForm: document.querySelector("#action-form"), formTitle: document.querySelector("#form-title"), formClose: document.querySelector("#form-close"), formCancel: document.querySelector("#form-cancel"), viewDialog: document.querySelector("#view-dialog"), viewTitle: document.querySelector("#view-title"), detailList: document.querySelector("#detail-list"), viewClose: document.querySelector("#view-close"), viewDone: document.querySelector("#view-done"), closureRate: document.querySelector("#closure-rate"), statusDonut: document.querySelector("#status-donut"), donutTotal: document.querySelector("#donut-total"), statusLegend: document.querySelector("#status-legend"), qualityFocus: document.querySelector("#quality-focus-text"), completionProgress: document.querySelector("#completion-progress"), completionProgressLabel: document.querySelector("#completion-progress-label")
 };
 let actions = [];
 let visibleActions = [];
@@ -94,16 +108,49 @@ function makeCell(row, value, className = "") { const cell = document.createElem
 function addBadge(cell, value, className) { const badge = document.createElement("span"); badge.className = `badge ${className}`; badge.textContent = value; cell.textContent = ""; cell.append(badge); }
 function getVisibleActions() {
   const query = elements.search.value.trim().toLocaleLowerCase();
+  const selectedStatus = elements.statusFilter.value;
   const searchableFields = ["number", "source", "sourceReference", "description", "correctiveAction", "department", "person", "remarks", "effectiveness"];
-  return actions.filter((action) => (!query || searchableFields.some((field) => action[field].toLocaleLowerCase().includes(query))) && (!elements.departmentFilter.value || action.department === elements.departmentFilter.value) && (!elements.statusFilter.value || action.status === elements.statusFilter.value));
+  return actions.filter((action) => {
+    const matchesStatus = !selectedStatus || (selectedStatus === "__overdue__" ? isOverdue(action) : action.status === selectedStatus);
+    return (!query || searchableFields.some((field) => action[field].toLocaleLowerCase().includes(query))) && (!elements.departmentFilter.value || action.department === elements.departmentFilter.value) && matchesStatus;
+  });
 }
 function populateFilters() {
   const department = elements.departmentFilter.value, status = elements.statusFilter.value;
   elements.departmentFilter.replaceChildren(new Option("All departments", ""), ...[...new Set(actions.map((action) => action.department))].sort().map((value) => new Option(value, value)));
-  elements.statusFilter.replaceChildren(new Option("All statuses", ""), ...STATUSES.map((value) => new Option(value, value)));
+  elements.statusFilter.replaceChildren(new Option("All statuses", ""), new Option("Overdue only", "__overdue__"), ...STATUSES.map((value) => new Option(value, value)));
   elements.departmentFilter.value = [...elements.departmentFilter.options].some((option) => option.value === department) ? department : "";
   elements.statusFilter.value = status;
 }
+function renderQualityVisual() {
+  const total = actions.length;
+  const counts = Object.fromEntries(STATUSES.map((status) => [status, actions.filter((action) => action.status === status).length]));
+  const completed = counts.Completed;
+  const overdue = actions.filter(isOverdue).length;
+  const closureRate = total ? Math.round((completed / total) * 100) : 0;
+  let cursor = 0;
+  const segments = STATUSES.filter((status) => counts[status] > 0).map((status) => {
+    const start = cursor;
+    cursor += (counts[status] / total) * 360;
+    return `${STATUS_COLORS[status]} ${start}deg ${cursor}deg`;
+  });
+  elements.statusDonut.style.background = total ? `conic-gradient(${segments.join(",")})` : "#d8e2eb";
+  elements.statusDonut.setAttribute("aria-label", total ? `Status distribution: ${STATUSES.map((status) => `${counts[status]} ${status}`).join(", ")}.` : "No actions available.");
+  elements.donutTotal.textContent = total;
+  elements.closureRate.textContent = `${closureRate}%`;
+  elements.statusLegend.replaceChildren(...STATUSES.map((status) => {
+    const item = document.createElement("div"); item.className = "legend-item";
+    const dot = document.createElement("span"); dot.className = "legend-dot"; dot.style.background = STATUS_COLORS[status]; dot.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span"); label.className = "legend-label"; label.textContent = status;
+    const count = document.createElement("strong"); count.className = "legend-count"; count.textContent = counts[status];
+    item.append(dot, label, count); return item;
+  }));
+  elements.qualityFocus.textContent = overdue ? `${overdue} overdue action${overdue === 1 ? "" : "s"} require immediate follow-up. Use the Overdue only filter to focus the register.` : total ? "No overdue actions. Continue monitoring target dates and effectiveness evidence." : "Add actions to begin monitoring follow-up priorities.";
+  elements.completionProgressLabel.textContent = `${completed} of ${total}`;
+  elements.completionProgress.style.width = `${closureRate}%`;
+  elements.completionProgress.setAttribute("aria-valuenow", String(closureRate));
+}
+
 function render() {
   visibleActions = getVisibleActions(); elements.body.replaceChildren();
   visibleActions.forEach((action) => {
@@ -116,12 +163,12 @@ function render() {
     [["View", "view"], ["Edit", "edit"], ["Delete", "delete"]].forEach(([label, command]) => { const button = document.createElement("button"); button.type = "button"; button.className = `row-button ${command === "delete" ? "delete" : ""}`; button.textContent = label; button.dataset.command = command; button.dataset.number = action.number; button.setAttribute("aria-label", `${label} ${action.number}`); controls.append(button); });
     elements.body.append(row);
   });
-  elements.total.textContent = actions.length; elements.open.textContent = actions.filter((action) => action.status !== "Completed").length; elements.overdue.textContent = actions.filter(isOverdue).length; elements.completed.textContent = actions.filter((action) => action.status === "Completed").length;
+  elements.total.textContent = actions.length; elements.open.textContent = actions.filter((action) => action.status !== "Completed").length; elements.overdue.textContent = actions.filter(isOverdue).length; elements.completed.textContent = actions.filter((action) => action.status === "Completed").length; renderQualityVisual();
   elements.recordCount.textContent = `Showing ${visibleActions.length} of ${actions.length} actions`; elements.empty.hidden = visibleActions.length !== 0; elements.exportCsv.disabled = visibleActions.length === 0;
   document.querySelector("#refresh-date").textContent = new Intl.DateTimeFormat("en", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 }
 function refreshInterface() { populateFilters(); render(); }
-function generateNumber() { const prefix = `QA-${currentYear}-`; const sequences = actions.filter((action) => action.number.startsWith(prefix)).map((action) => Number(action.number.slice(prefix.length))).filter(Number.isFinite); let next = sequences.length ? Math.max(...sequences) + 1 : 1; while (actions.some((action) => action.number === `${prefix}${String(next).padStart(3, "0")}`)) next += 1; return `${prefix}${String(next).padStart(3, "0")}`; }
+function generateNumber(records = actions) { const prefix = `QA-${currentYear}-`; const sequences = records.filter((action) => action.number.startsWith(prefix)).map((action) => Number(action.number.slice(prefix.length))).filter(Number.isFinite); let next = sequences.length ? Math.max(...sequences) + 1 : 1; while (records.some((action) => action.number === `${prefix}${String(next).padStart(3, "0")}`)) next += 1; return `${prefix}${String(next).padStart(3, "0")}`; }
 
 function setSelectOptions() { const source = document.querySelector("#source"); source.append(...SOURCES.map((value) => new Option(value, value))); document.querySelector("#status").append(...STATUSES.map((value) => new Option(value, value))); document.querySelector("#priority").append(...PRIORITIES.map((value) => new Option(value, value))); }
 function clearFormErrors() { elements.actionForm.querySelectorAll("[aria-invalid]").forEach((field) => field.removeAttribute("aria-invalid")); elements.actionForm.querySelectorAll(".field-error").forEach((error) => { error.textContent = ""; }); }
@@ -144,9 +191,60 @@ function openView(action, opener) {
 }
 function deleteAction(action) { if (!window.confirm(`Delete ${action.number}? This action cannot be undone.`)) return; const next = actions.filter((item) => item.number !== action.number); if (!persist(next)) return; actions = next; refreshInterface(); showMessage(`${action.number} was deleted.`); }
 
+function parseCsv(text) {
+  const rows = []; let row = [], field = "", quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (quoted) {
+      if (character === '"' && text[index + 1] === '"') { field += '"'; index += 1; }
+      else if (character === '"') quoted = false;
+      else field += character;
+    } else if (character === '"') quoted = true;
+    else if (character === ",") { row.push(field); field = ""; }
+    else if (character === "\n" || character === "\r") {
+      row.push(field); field = ""; if (row.some((value) => value.trim())) rows.push(row); row = [];
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
+    } else field += character;
+  }
+  if (quoted) throw new Error("The CSV contains an unclosed quoted field.");
+  row.push(field); if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+}
+function normalizeHeader(value) { return String(value || "").replace(/^\ufeff/, "").trim().toLocaleLowerCase().replace(/[^a-z0-9]/g, ""); }
+function normalizeCsvDate(value) {
+  const text = String(value || "").trim(); if (!text || validDate(text)) return text;
+  const match = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/); if (!match) return text;
+  const normalized = `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`; return validDate(normalized) ? normalized : text;
+}
+function csvRowsToActions(text) {
+  const rows = parseCsv(text); if (rows.length < 2) throw new Error("CSV must contain a header row and at least one action row.");
+  if (rows.length > 10001) throw new Error("CSV contains too many actions (maximum 10,000).");
+  const indexes = {};
+  rows[0].forEach((header, index) => {
+    const normalized = normalizeHeader(header); const field = CSV_HEADER_ALIASES[normalized] || FIELDS.find((name) => normalizeHeader(name) === normalized);
+    if (!field) return; if (indexes[field] !== undefined) throw new Error(`Duplicate column for ${CSV_HEADINGS[FIELDS.indexOf(field)]}.`); indexes[field] = index;
+  });
+  const missing = CSV_REQUIRED_FIELDS.filter((field) => indexes[field] === undefined); if (missing.length) throw new Error(`Missing required column${missing.length === 1 ? "" : "s"}: ${missing.map((field) => CSV_HEADINGS[FIELDS.indexOf(field)]).join(", ")}.`);
+  const imported = []; const numbers = new Set(actions.map((action) => action.number));
+  rows.slice(1).forEach((row, rowIndex) => {
+    const raw = Object.fromEntries(FIELDS.map((field) => [field, indexes[field] === undefined ? "" : String(row[indexes[field]] ?? "")]));
+    raw.number = raw.number.trim() || generateNumber([...actions, ...imported]); raw.status = raw.status.trim() || "Open"; raw.priority = raw.priority.trim() || "Medium"; raw.lastUpdate = normalizeCsvDate(raw.lastUpdate) || todayIso(); raw.targetDate = normalizeCsvDate(raw.targetDate); raw.closureDate = normalizeCsvDate(raw.closureDate);
+    const action = normalizeAction(raw); const errors = validateAction(action, { existingNumbers: numbers });
+    if (errors.length) { const error = errors[0]; throw new Error(`CSV row ${rowIndex + 2} (${action.number || "no number"}), ${CSV_HEADINGS[FIELDS.indexOf(error.field)] || error.field}: ${error.message}`); }
+    numbers.add(action.number); imported.push(action);
+  });
+  if (!imported.length) throw new Error("CSV contains no action records."); return imported;
+}
+async function importCsv(event) {
+  const file = event.target.files[0]; event.target.value = ""; if (!file) return; if (file.size > 10 * 1024 * 1024) { showMessage("CSV file is too large (maximum 10 MB).", true); return; }
+  let imported; try { imported = csvRowsToActions(await file.text()); } catch (error) { showMessage(`CSV was not imported: ${error.message} Existing records were not changed.`, true); return; }
+  if (!window.confirm(`Add ${imported.length} validated action${imported.length === 1 ? "" : "s"} to the ${actions.length} actions already stored in this browser?`)) { showMessage("CSV import cancelled. Existing records were not changed."); return; }
+  const next = [...actions, ...imported]; if (!persist(next)) return; actions = next; refreshInterface(); showMessage(`CSV imported successfully. ${imported.length} action${imported.length === 1 ? " was" : "s were"} added; ${actions.length} actions are now stored in this browser.`);
+}
+
 function safeCsv(value) { let text = String(value ?? ""); if (/^[=+\-@]/.test(text)) text = `'${text}`; return `"${text.replaceAll('"', '""')}"`; }
 function download(content, type, filename) { const url = URL.createObjectURL(new Blob([content], { type })); const link = document.createElement("a"); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); }
-function exportCsv() { const headings = ["Action Number", "Source", "Source Reference Number", "Action Description", "Required Corrective Action", "Responsible Department", "Responsible Person", "Target Date", "Status", "Priority", "Last Update", "Remarks or Evidence Reference", "Effectiveness Verification", "Closure Date"]; const csv = [headings, ...visibleActions.map((action) => FIELDS.map((field) => action[field]))].map((row) => row.map(safeCsv).join(",")).join("\r\n"); download(`\ufeff${csv}`, "text/csv;charset=utf-8", `quality-actions-visible-${todayIso()}.csv`); }
+function exportCsv() { const csv = [CSV_HEADINGS, ...visibleActions.map((action) => FIELDS.map((field) => action[field]))].map((row) => row.map(safeCsv).join(",")).join("\r\n"); download(`\ufeff${csv}`, "text/csv;charset=utf-8", `quality-actions-visible-${todayIso()}.csv`); }
 function exportBackup() { download(JSON.stringify({ version: BACKUP_VERSION, exportedAt: new Date().toISOString(), actions }, null, 2), "application/json", `quality-actions-backup-${todayIso()}.json`); }
 async function importBackup(event) {
   const file = event.target.files[0]; event.target.value = ""; if (!file) return; if (file.size > 10 * 1024 * 1024) { showMessage("Backup file is too large (maximum 10 MB).", true); return; }
@@ -163,4 +261,4 @@ elements.newAction.addEventListener("click", (event) => openForm(null, event.cur
 document.querySelector("#status").addEventListener("change", (event) => { document.querySelector("#closure-label").textContent = event.target.value === "Completed" ? "(required)" : "(optional)"; });
 elements.viewClose.addEventListener("click", () => elements.viewDialog.close()); elements.viewDone.addEventListener("click", () => elements.viewDialog.close()); elements.viewDialog.addEventListener("close", returnFocus);
 elements.body.addEventListener("click", (event) => { const button = event.target.closest("button[data-command]"); if (!button) return; const action = actions.find((item) => item.number === button.dataset.number); if (!action) return; if (button.dataset.command === "view") openView(action, button); if (button.dataset.command === "edit") openForm(action, button); if (button.dataset.command === "delete") deleteAction(action); });
-elements.exportCsv.addEventListener("click", exportCsv); elements.backup.addEventListener("click", exportBackup); elements.importInput.addEventListener("change", importBackup); elements.reset.addEventListener("click", resetDemo); document.querySelector("#filter-form").addEventListener("submit", (event) => event.preventDefault());
+elements.exportCsv.addEventListener("click", exportCsv); elements.csvImport.addEventListener("change", importCsv); elements.backup.addEventListener("click", exportBackup); elements.importInput.addEventListener("change", importBackup); elements.reset.addEventListener("click", resetDemo); document.querySelector("#filter-form").addEventListener("submit", (event) => event.preventDefault());

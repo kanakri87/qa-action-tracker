@@ -23,11 +23,30 @@
       <article class="summary-card complete-card"><span class="card-icon" aria-hidden="true">✓</span><div><p>Completed actions</p><strong id="completed-count">0</strong><small>Actions closed</small></div></article>
     </section>
 
+    <section class="quality-visual" aria-labelledby="quality-health-heading">
+      <div class="quality-visual-heading">
+        <div><p class="eyebrow">Quality performance</p><h2 id="quality-health-heading">Action health at a glance</h2><p>Live status distribution and closure progress for the complete register.</p></div>
+        <div class="quality-score"><strong id="closure-rate">0%</strong><span>Closure rate</span></div>
+      </div>
+      <div class="quality-visual-grid">
+        <div class="quality-donut-wrap"><div class="status-donut" id="status-donut" role="img" aria-label="No actions available"><div><strong id="donut-total">0</strong><span>Actions</span></div></div></div>
+        <div class="quality-legend" id="status-legend" aria-label="Status breakdown"></div>
+        <div class="quality-focus">
+          <span class="quality-focus-icon" aria-hidden="true">✓</span>
+          <h3>Quality follow-up focus</h3>
+          <p id="quality-focus-text">Add actions to begin monitoring follow-up priorities.</p>
+          <div class="quality-progress-heading"><span>Completion progress</span><strong id="completion-progress-label">0 of 0</strong></div>
+          <div class="quality-progress-track"><span id="completion-progress" role="progressbar" aria-label="Completed actions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></div>
+        </div>
+      </div>
+    </section>
+
     <section class="tracker-panel" aria-labelledby="action-register-heading">
       <div class="panel-heading"><div><h2 id="action-register-heading">Quality action register</h2><p id="record-count" aria-live="polite"></p></div>
         <div class="management-toolbar" aria-label="Action register tools">
           <button class="button button-primary" id="new-button" type="button">+ New Action</button>
           <button class="button button-secondary" id="export-button" type="button">Export visible CSV</button>
+          <label class="button button-secondary file-button" for="csv-import-input">Import CSV</label><input class="sr-only" id="csv-import-input" type="file" accept="text/csv,.csv">
           <button class="button button-secondary" id="backup-button" type="button">Export JSON Backup</button>
           <label class="button button-secondary file-button" for="import-input">Import JSON Backup</label><input class="sr-only" id="import-input" type="file" accept="application/json,.json">
           <button class="button button-danger-outline" id="reset-button" type="button">Reset demo data</button>
@@ -67,7 +86,7 @@
   </form></dialog>
 
   <dialog id="view-dialog" aria-labelledby="view-title"><div class="dialog-heading"><div><p class="eyebrow">Action details</p><h2 id="view-title">Quality action</h2></div><button class="icon-button" id="view-close" type="button" aria-label="Close action details">×</button></div><dl id="detail-list" class="detail-grid"></dl><div class="dialog-actions"><button class="button button-primary" id="view-done" type="button">Close</button></div></dialog>
-  <footer><p>QualityCore QMS <span aria-hidden="true">•</span> Browser demonstration tool</p></footer>
+  <footer><p>QualityCore QMS <span aria-hidden="true">•</span> Browser-based action management</p><p class="powered-by">Powered by <strong>Anas Kanakri</strong></p></footer>
   <script src="app.js"></script>
 </body>
 </html>
