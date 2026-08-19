@@ -1,7 +1,11 @@
 "use strict";
 
 const STORAGE_KEY = "qualityCore.qaActionTracker.v1";
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
+const EVIDENCE_DB = "qualityCore.tasksActionsEvidence.v1";
+const EVIDENCE_STORE = "attachments";
+const MAX_EVIDENCE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png", "doc", "docx", "xls", "xlsx", "csv", "txt"]);
 const SOURCES = ["Internal Audit", "NCR", "Customer Complaint", "Site Feedback", "Supplier NCR", "Management Review", "EQM/ECAS", "ADNOC/CCTC", "Calibration", "Other"];
 const STATUSES = ["Open", "In Progress", "Under Review", "On Hold", "Completed"];
 const PRIORITIES = ["High", "Medium", "Low"];
@@ -26,7 +30,7 @@ const STATUS_COLORS = { Open: "#4aa3df", "In Progress": "#f4b942", "Under Review
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const shiftDate = (days) => { const date = new Date(); date.setHours(12, 0, 0, 0); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); };
 const currentYear = new Date().getFullYear();
-const demo = (sequence, source, description, correctiveAction, department, person, offset, status, priority, extras = {}) => ({ number: `QA-${currentYear}-${String(sequence).padStart(3, "0")}`, source, sourceReference: extras.sourceReference || `DEMO-${String(sequence).padStart(3, "0")}`, description, correctiveAction, department, person, targetDate: shiftDate(offset), status, priority, lastUpdate: todayIso(), remarks: extras.remarks || "Fictional demonstration record.", effectiveness: extras.effectiveness || "", closureDate: status === "Completed" ? shiftDate(offset + 2) : "", targetDateHistory: [], qualityComments: [] });
+const demo = (sequence, source, description, correctiveAction, department, person, offset, status, priority, extras = {}) => ({ id: `demo-record-${sequence}`, number: `QA-${currentYear}-${String(sequence).padStart(3, "0")}`, source, sourceReference: extras.sourceReference || `DEMO-${String(sequence).padStart(3, "0")}`, description, correctiveAction, department, person, targetDate: shiftDate(offset), status, priority, lastUpdate: todayIso(), remarks: extras.remarks || "Fictional demonstration record.", effectiveness: extras.effectiveness || "", closureDate: status === "Completed" ? shiftDate(offset + 2) : "", targetDateHistory: [], qualityComments: [] });
 const DEMO_ACTIONS = [
   demo(1, "Internal Audit", "Document the fictional supplier review workflow.", "Approve and publish a revised review checklist.", "Procurement", "Avery Stone", 25, "In Progress", "High"),
   demo(2, "NCR", "Investigate recurring demo label alignment findings.", "Complete a cause review and verify the setup guide.", "Operations", "Jordan Vale", -18, "Open", "High"),
@@ -46,6 +50,12 @@ let editingNumber = null;
 let formDirty = false;
 let dialogOpener = null;
 let traceActionNumber = null;
+let evidenceRecordId = null;
+let evidenceCounts = new Map();
+
+Object.assign(elements, {
+  evidenceDialog: document.querySelector("#evidence-dialog"), evidenceClose: document.querySelector("#evidence-close"), evidenceDone: document.querySelector("#evidence-done"), evidenceForm: document.querySelector("#evidence-form"), evidenceFiles: document.querySelector("#evidence-files"), evidenceNote: document.querySelector("#evidence-note"), evidenceStatus: document.querySelector("#evidence-status"), evidenceList: document.querySelector("#evidence-list"), evidenceDialogCount: document.querySelector("#evidence-dialog-count"), evidenceRecordNumber: document.querySelector("#evidence-record-number"), evidenceRecordDescription: document.querySelector("#evidence-record-description")
+});
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`));
@@ -56,7 +66,8 @@ const isOverdue = (action) => action.status !== "Completed" && action.targetDate
 const showMessage = (text, error = false) => { elements.message.textContent = text; elements.message.classList.toggle("error", error); elements.message.hidden = false; elements.message.scrollIntoView({ block: "nearest" }); };
 const clearMessage = () => { elements.message.hidden = true; elements.message.textContent = ""; };
 
-function normalizeAction(action) { return Object.fromEntries(FIELDS.map((field) => [field, typeof action[field] === "string" ? action[field].trim() : ""])); }
+function makeRecordId() { return globalThis.crypto?.randomUUID?.() || `record-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
+function normalizeAction(action) { return { id: typeof action.id === "string" && action.id.trim() ? action.id.trim() : makeRecordId(), ...Object.fromEntries(FIELDS.map((field) => [field, typeof action[field] === "string" ? action[field].trim() : ""])) }; }
 function validateAction(action, options = {}) {
   const errors = [];
   const add = (field, message) => errors.push({ field, message });
@@ -90,14 +101,15 @@ function validateTraceData(raw, actionIndex) {
 
 function validateDataset(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Backup must contain a JSON object.");
-  if (data.version !== BACKUP_VERSION) throw new Error(`Unsupported backup version. Expected version ${BACKUP_VERSION}.`);
+  if (![1, BACKUP_VERSION].includes(data.version)) throw new Error(`Unsupported backup version. Expected version 1 or ${BACKUP_VERSION}.`);
   if (!Array.isArray(data.actions)) throw new Error("Backup actions must be an array.");
   if (data.actions.length > 10000) throw new Error("Backup contains too many actions (maximum 10,000).");
-  const numbers = new Set();
+  const numbers = new Set(), ids = new Set();
   const normalized = data.actions.map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`Action ${index + 1} is not a valid record.`);
     for (const field of FIELDS) if (raw[field] !== undefined && typeof raw[field] !== "string") throw new Error(`Action ${index + 1}: ${field} must be text.`);
     const action = { ...normalizeAction(raw), ...validateTraceData(raw, index) };
+    if (ids.has(action.id)) throw new Error(`Action ${index + 1}: duplicate internal record ID.`); ids.add(action.id);
     const errors = validateAction(action, { existingNumbers: numbers });
     if (errors.length) throw new Error(`Action ${index + 1} (${action.number || "no number"}): ${errors[0].message}`);
     numbers.add(action.number);
@@ -118,11 +130,30 @@ function loadActions() {
   try {
     const parsed = JSON.parse(stored);
     actions = validateDataset({ version: parsed.version, actions: parsed.actions });
+    if (parsed.version !== BACKUP_VERSION || parsed.actions.some((action) => !action.id)) persist(actions);
   } catch (error) {
     actions = [];
     showMessage(`Saved browser data could not be loaded safely: ${error.message} Your stored value was left unchanged. Import a valid backup or reset demo data to recover.`, true);
   }
 }
+
+function openEvidenceDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(EVIDENCE_DB, 1);
+    request.onupgradeneeded = () => { const store = request.result.createObjectStore(EVIDENCE_STORE, { keyPath: "id" }); store.createIndex("recordId", "recordId", { unique: false }); };
+    request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+  });
+}
+async function evidenceTransaction(mode, operation) {
+  const db = await openEvidenceDb();
+  try { return await new Promise((resolve, reject) => { const tx = db.transaction(EVIDENCE_STORE, mode); const result = operation(tx.objectStore(EVIDENCE_STORE)); tx.oncomplete = () => resolve(result?.result); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); }); } finally { db.close(); }
+}
+const getEvidenceForRecord = (recordId) => evidenceTransaction("readonly", (store) => store.index("recordId").getAll(recordId));
+const getAllEvidence = () => evidenceTransaction("readonly", (store) => store.getAll());
+const putEvidence = (attachment) => evidenceTransaction("readwrite", (store) => store.put(attachment));
+const deleteEvidenceItem = (id) => evidenceTransaction("readwrite", (store) => store.delete(id));
+async function deleteEvidenceForRecord(recordId) { const items = await getEvidenceForRecord(recordId); if (!items.length) return 0; await evidenceTransaction("readwrite", (store) => { items.forEach((item) => store.delete(item.id)); }); return items.length; }
+async function refreshEvidenceCounts() { try { const items = await getAllEvidence(); evidenceCounts = new Map(); items.forEach((item) => evidenceCounts.set(item.recordId, (evidenceCounts.get(item.recordId) || 0) + 1)); render(); } catch (error) { showMessage(`Evidence storage is unavailable (${error.name || "browser storage error"}). Records remain available.`, true); } }
 
 function makeCell(row, value, className = "") { const cell = document.createElement("td"); if (className) cell.className = className; cell.textContent = value; row.append(cell); return cell; }
 function addBadge(cell, value, className) { const badge = document.createElement("span"); badge.className = `badge ${className}`; badge.textContent = value; cell.textContent = ""; cell.append(badge); }
@@ -155,7 +186,7 @@ function renderQualityVisual() {
     return `${STATUS_COLORS[status]} ${start}deg ${cursor}deg`;
   });
   elements.statusDonut.style.background = total ? `conic-gradient(${segments.join(",")})` : "#d8e2eb";
-  elements.statusDonut.setAttribute("aria-label", total ? `Status distribution: ${STATUSES.map((status) => `${counts[status]} ${status}`).join(", ")}.` : "No actions available.");
+  elements.statusDonut.setAttribute("aria-label", total ? `Status distribution: ${STATUSES.map((status) => `${counts[status]} ${status}`).join(", ")}.` : "No records available.");
   elements.donutTotal.textContent = total;
   elements.closureRate.textContent = `${closureRate}%`;
   elements.statusLegend.replaceChildren(...STATUSES.map((status) => {
@@ -165,7 +196,7 @@ function renderQualityVisual() {
     const count = document.createElement("strong"); count.className = "legend-count"; count.textContent = counts[status];
     item.append(dot, label, count); return item;
   }));
-  elements.qualityFocus.textContent = overdue ? `${overdue} overdue action${overdue === 1 ? "" : "s"} require immediate follow-up. Use the Overdue only filter to focus the register.` : total ? "No overdue actions. Continue monitoring target dates and effectiveness evidence." : "Add actions to begin monitoring follow-up priorities.";
+  elements.qualityFocus.textContent = overdue ? `${overdue} overdue record${overdue === 1 ? "" : "s"} require immediate follow-up. Use the Overdue only filter to focus the register.` : total ? "No overdue records. Continue monitoring target dates and effectiveness evidence." : "Add records to begin monitoring follow-up priorities.";
   elements.completionProgressLabel.textContent = `${completed} of ${total}`;
   elements.completionProgress.style.width = `${closureRate}%`;
   elements.completionProgress.setAttribute("aria-valuenow", String(closureRate));
@@ -181,11 +212,11 @@ function render() {
     const statusCell = makeCell(row, ""); addBadge(statusCell, action.status, `status-${({ Open: "open", "In Progress": "progress", "Under Review": "review", "On Hold": "hold", Completed: "completed" })[action.status]}`);
     const priorityCell = makeCell(row, ""); addBadge(priorityCell, action.priority, `priority-${action.priority.toLowerCase()}`);
     const controls = makeCell(row, ""); controls.className = "row-actions";
-    [["View", "view"], ["Edit", "edit"], [`Comments (${action.qualityComments?.length || 0})`, "trace"], ["Delete", "delete"]].forEach(([label, command]) => { const button = document.createElement("button"); button.type = "button"; button.className = `row-button ${command === "delete" ? "delete" : ""} ${command === "trace" ? "trace" : ""}`; button.textContent = label; button.dataset.command = command; button.dataset.number = action.number; button.setAttribute("aria-label", `${command === "trace" ? "Open traceability for" : label} ${action.number}`); controls.append(button); });
+    [["View", "view"], ["Edit", "edit"], [`Comments (${action.qualityComments?.length || 0})`, "trace"], ["Delete", "delete"], [`Evidence (${evidenceCounts.get(action.id) || 0})`, "evidence"]].forEach(([label, command]) => { const button = document.createElement("button"); button.type = "button"; button.className = `row-button ${command === "delete" ? "delete" : ""} ${command === "trace" ? "trace" : ""} ${command === "evidence" ? "evidence" : ""}`; button.textContent = label; button.dataset.command = command; button.dataset.number = action.number; button.dataset.recordId = action.id; button.setAttribute("aria-label", `${command === "trace" ? "Open traceability for" : label} ${action.number}`); controls.append(button); });
     elements.body.append(row);
   });
   elements.total.textContent = actions.length; elements.open.textContent = actions.filter((action) => action.status !== "Completed").length; elements.overdue.textContent = actions.filter(isOverdue).length; elements.completed.textContent = actions.filter((action) => action.status === "Completed").length; renderQualityVisual();
-  elements.recordCount.textContent = `Showing ${visibleActions.length} of ${actions.length} actions`; elements.empty.hidden = visibleActions.length !== 0; elements.exportCsv.disabled = visibleActions.length === 0;
+  elements.recordCount.textContent = `Showing ${visibleActions.length} of ${actions.length} records`; elements.empty.hidden = visibleActions.length !== 0; elements.exportCsv.disabled = visibleActions.length === 0;
   document.querySelector("#refresh-date").textContent = new Intl.DateTimeFormat("en", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 }
 function refreshInterface() { populateFilters(); render(); }
@@ -201,6 +232,7 @@ function openForm(action = null, opener = document.activeElement) {
 function requestFormClose() { if (formDirty && !window.confirm("Close without saving? Your unsaved changes will be lost.")) return; elements.actionDialog.close(); }
 function returnFocus() { if (dialogOpener?.isConnected) dialogOpener.focus(); dialogOpener = null; }
 function applyTraceability(action, previous = null) {
+  action.id = previous?.id || action.id || makeRecordId();
   action.targetDateHistory = clone(previous?.targetDateHistory || []); action.qualityComments = clone(previous?.qualityComments || []);
   if (previous && previous.targetDate !== action.targetDate) { action.targetDateHistory.push({ id: makeTraceId(), changedAt: new Date().toISOString(), previousDate: previous.targetDate, newDate: action.targetDate }); return true; }
   return false;
@@ -231,7 +263,22 @@ function addQualityComment(event) {
   next[index].targetDateHistory = next[index].targetDateHistory || []; next[index].qualityComments = next[index].qualityComments || []; next[index].qualityComments.push({ id: makeTraceId(), createdAt: new Date().toISOString(), author: "Quality", text }); next[index].lastUpdate = todayIso();
   if (!persist(next)) return; actions = next; refreshInterface(); elements.qualityCommentInput.value = ""; renderTrace(actions[index]); elements.qualityCommentNotice.textContent = "Quality comment saved with its date and time."; elements.qualityCommentInput.focus();
 }
-function deleteAction(action) { if (!window.confirm(`Delete ${action.number}? Its target date history and Quality comments will also be deleted. This cannot be undone.`)) return; const next = actions.filter((item) => item.number !== action.number); if (!persist(next)) return; actions = next; refreshInterface(); showMessage(`${action.number} was deleted.`); }
+function formatBytes(size) { if (size < 1024) return `${size} B`; if (size < 1024 ** 2) return `${(size / 1024).toFixed(1)} KB`; return `${(size / 1024 ** 2).toFixed(1)} MB`; }
+function evidenceType(item) { return item.type || `.${item.name.split(".").pop()?.toLowerCase() || "file"}`; }
+function openEvidenceBlob(item, downloadFile = false) { const url = URL.createObjectURL(item.blob); const link = document.createElement("a"); link.href = url; if (downloadFile) link.download = item.name; else { link.target = "_blank"; link.rel = "noopener"; } document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
+async function renderEvidenceList() {
+  const items = await getEvidenceForRecord(evidenceRecordId); elements.evidenceList.replaceChildren(); elements.evidenceDialogCount.textContent = `${items.length} file${items.length === 1 ? "" : "s"}`;
+  if (!items.length) { const empty = document.createElement("p"); empty.className = "trace-empty"; empty.textContent = "No evidence is attached to this record."; elements.evidenceList.append(empty); return; }
+  items.sort((a, b) => b.attachedAt.localeCompare(a.attachedAt)).forEach((item) => { const card = document.createElement("article"); card.className = "evidence-item"; const info = document.createElement("div"); const title = document.createElement("h4"); title.textContent = item.name; const meta = document.createElement("p"); meta.textContent = `${evidenceType(item)} • ${formatBytes(item.size)} • ${formatDateTime(item.attachedAt)}`; info.append(title, meta); if (item.note) { const note = document.createElement("p"); note.className = "evidence-note"; note.textContent = item.note; info.append(note); } const controls = document.createElement("div"); controls.className = "evidence-actions"; [["Open / preview", false], ["Download", true]].forEach(([label, downloadFile]) => { const button = document.createElement("button"); button.type = "button"; button.className = "row-button"; button.textContent = label; button.setAttribute("aria-label", `${label} ${item.name}`); button.addEventListener("click", () => openEvidenceBlob(item, downloadFile)); controls.append(button); }); const remove = document.createElement("button"); remove.type = "button"; remove.className = "row-button delete"; remove.textContent = "Delete"; remove.setAttribute("aria-label", `Delete evidence ${item.name}`); remove.addEventListener("click", async () => { if (!window.confirm(`Delete evidence file “${item.name}”? This cannot be undone.`)) return; await deleteEvidenceItem(item.id); elements.evidenceStatus.textContent = `${item.name} was deleted.`; await refreshEvidenceCounts(); await renderEvidenceList(); }); controls.append(remove); card.append(info, controls); elements.evidenceList.append(card); });
+}
+async function openEvidence(action, opener) { evidenceRecordId = action.id; dialogOpener = opener; elements.evidenceRecordNumber.textContent = action.number; elements.evidenceRecordDescription.textContent = action.description; elements.evidenceForm.reset(); elements.evidenceStatus.textContent = ""; elements.evidenceDialog.showModal(); elements.evidenceClose.focus(); try { await renderEvidenceList(); } catch (error) { elements.evidenceStatus.textContent = `Evidence could not be loaded: ${error.message}`; } }
+async function uploadEvidence(event) {
+  event.preventDefault(); const files = [...elements.evidenceFiles.files]; if (!files.length) return; const invalid = files.find((file) => !ALLOWED_EXTENSIONS.has(file.name.split(".").pop()?.toLowerCase())); const oversized = files.find((file) => file.size > MAX_EVIDENCE_SIZE);
+  if (invalid) { elements.evidenceStatus.textContent = `${invalid.name} is unsupported. Choose PDF, JPG, PNG, DOC, DOCX, XLS, XLSX, CSV or TXT.`; showMessage(elements.evidenceStatus.textContent, true); return; }
+  if (oversized) { elements.evidenceStatus.textContent = `${oversized.name} is larger than the 5 MB per-file limit.`; showMessage(elements.evidenceStatus.textContent, true); return; }
+  try { for (const file of files) await putEvidence({ id: makeRecordId(), recordId: evidenceRecordId, name: file.name, type: file.type, size: file.size, attachedAt: new Date().toISOString(), note: elements.evidenceNote.value.trim(), blob: file }); elements.evidenceForm.reset(); elements.evidenceStatus.textContent = `${files.length} evidence file${files.length === 1 ? "" : "s"} attached successfully.`; showMessage(elements.evidenceStatus.textContent); await refreshEvidenceCounts(); await renderEvidenceList(); } catch (error) { elements.evidenceStatus.textContent = `Evidence could not be saved (${error.name || "storage error"}).`; showMessage(elements.evidenceStatus.textContent, true); }
+}
+async function deleteAction(action) { if (!window.confirm(`Delete ${action.number}? Its history, comments, and ${evidenceCounts.get(action.id) || 0} evidence file(s) will also be deleted. This cannot be undone.`)) return; const next = actions.filter((item) => item.id !== action.id); if (!persist(next)) return; actions = next; try { await deleteEvidenceForRecord(action.id); } catch (error) { showMessage(`Record deleted, but its evidence could not be cleared (${error.name || "storage error"}).`, true); } await refreshEvidenceCounts(); refreshInterface(); showMessage(`${action.number} and its associated evidence were deleted.`); }
 
 function parseCsv(text) {
   const rows = []; let row = [], field = "", quoted = false;
@@ -287,21 +334,25 @@ async function importCsv(event) {
 function safeCsv(value) { let text = String(value ?? ""); if (/^[=+\-@]/.test(text)) text = `'${text}`; return `"${text.replaceAll('"', '""')}"`; }
 function download(content, type, filename) { const url = URL.createObjectURL(new Blob([content], { type })); const link = document.createElement("a"); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); }
 function exportCsv() { const csv = [CSV_HEADINGS, ...visibleActions.map((action) => FIELDS.map((field) => action[field]))].map((row) => row.map(safeCsv).join(",")).join("\r\n"); download(`\ufeff${csv}`, "text/csv;charset=utf-8", `quality-actions-visible-${todayIso()}.csv`); }
-function exportBackup() { download(JSON.stringify({ version: BACKUP_VERSION, exportedAt: new Date().toISOString(), actions }, null, 2), "application/json", `quality-actions-backup-${todayIso()}.json`); }
+function blobToDataUrl(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); }); }
+function dataUrlToBlob(value) { const match = /^data:([^;,]*);base64,([A-Za-z0-9+/]*={0,2})$/.exec(value); if (!match) throw new Error("Attachment content is not valid base64 data."); const bytes = atob(match[2]); const data = new Uint8Array(bytes.length); for (let i = 0; i < bytes.length; i += 1) data[i] = bytes.charCodeAt(i); return new Blob([data], { type: match[1] || "application/octet-stream" }); }
+async function exportBackup() { try { const stored = await getAllEvidence(); const attachments = await Promise.all(stored.map(async ({ blob, ...item }) => ({ ...item, content: await blobToDataUrl(blob) }))); download(JSON.stringify({ version: BACKUP_VERSION, exportedAt: new Date().toISOString(), actions, attachments }, null, 2), "application/json", `tasks-actions-backup-${todayIso()}.json`); showMessage(`JSON backup exported with ${actions.length} records and ${attachments.length} attachments. Evidence-inclusive backups may be large because files are base64 encoded.`); } catch (error) { showMessage(`Backup could not be created (${error.name || "storage error"}).`, true); } }
+function validateBackupAttachments(raw, restored) { if (raw === undefined) return []; if (!Array.isArray(raw)) throw new Error("Backup attachments must be an array."); if (raw.length > 10000) throw new Error("Backup contains too many attachments (maximum 10,000)."); const recordIds = new Set(restored.map((item) => item.id)), ids = new Set(); return raw.map((item, index) => { if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`Attachment ${index + 1} is invalid.`); for (const field of ["id", "recordId", "name", "type", "attachedAt", "note", "content"]) if (typeof item[field] !== "string") throw new Error(`Attachment ${index + 1}: ${field} must be text.`); const extension = item.name.split(".").pop()?.toLowerCase(); if (!item.id || ids.has(item.id)) throw new Error(`Attachment ${index + 1} has a missing or duplicate ID.`); ids.add(item.id); if (!recordIds.has(item.recordId)) throw new Error(`Attachment ${index + 1} does not reference a restored record.`); if (!ALLOWED_EXTENSIONS.has(extension)) throw new Error(`Attachment ${index + 1} has an unsupported file type.`); if (Number.isNaN(Date.parse(item.attachedAt))) throw new Error(`Attachment ${index + 1} has an invalid date.`); if (item.note.length > 250) throw new Error(`Attachment ${index + 1} note is too long.`); const blob = dataUrlToBlob(item.content); if (blob.size > MAX_EVIDENCE_SIZE || blob.size !== item.size || !Number.isInteger(item.size) || item.size < 0) throw new Error(`Attachment ${index + 1} has invalid content or size.`); return { id: item.id, recordId: item.recordId, name: item.name, type: item.type, size: item.size, attachedAt: item.attachedAt, note: item.note, blob }; }); }
 async function importBackup(event) {
-  const file = event.target.files[0]; event.target.value = ""; if (!file) return; if (file.size > 10 * 1024 * 1024) { showMessage("Backup file is too large (maximum 10 MB).", true); return; }
-  let restored; try { restored = validateDataset(JSON.parse(await file.text())); } catch (error) { showMessage(`Backup was not imported: ${error.message} Existing records were not changed.`, true); return; }
-  if (!window.confirm(`Replace all ${actions.length} locally saved actions with ${restored.length} actions from this validated backup?`)) { showMessage("Import cancelled. Existing records were not changed."); return; }
-  if (!persist(restored)) return; actions = restored; refreshInterface(); showMessage(`Backup restored successfully. ${actions.length} actions are now stored in this browser.`);
+  const file = event.target.files[0]; event.target.value = ""; if (!file) return; if (file.size > 250 * 1024 * 1024) { showMessage("Backup file is too large (maximum 250 MB).", true); return; }
+  let restored, attachments; try { const parsed = JSON.parse(await file.text()); restored = validateDataset(parsed); attachments = validateBackupAttachments(parsed.attachments, restored); } catch (error) { showMessage(`Backup was not imported: ${error.message} Existing records and attachments were not changed.`, true); return; }
+  const currentAttachments = await getAllEvidence(); if (!window.confirm(`Validated backup: restore ${restored.length} records and ${attachments.length} attachments? This will explicitly replace the ${actions.length} records and ${currentAttachments.length} attachments currently in this browser; it will not merge or silently overwrite them.`)) { showMessage("Import cancelled. Existing records and attachments were not changed."); return; }
+  if (!persist(restored)) return; try { await evidenceTransaction("readwrite", (store) => { store.clear(); attachments.forEach((item) => store.put(item)); }); } catch (error) { showMessage(`Records restored, but evidence restoration failed (${error.name || "storage error"}). Re-import the backup.`, true); return; } actions = restored; await refreshEvidenceCounts(); refreshInterface(); showMessage(`Backup restored successfully: ${actions.length} records and ${attachments.length} attachments.`);
 }
-function resetDemo() { if (!window.confirm("Reset demo data? All locally saved actions will be replaced by the original fictional demonstration records. This cannot be undone unless you exported a backup.")) return; const next = clone(DEMO_ACTIONS); if (!persist(next)) return; actions = next; refreshInterface(); showMessage("Demonstration data was reset successfully."); }
+async function resetDemo() { if (!window.confirm("Reset demo data? All locally saved records and evidence will be replaced by the original fictional demonstration records. This cannot be undone unless you exported a JSON backup.")) return; const next = clone(DEMO_ACTIONS); if (!persist(next)) return; actions = next; await evidenceTransaction("readwrite", (store) => store.clear()); await refreshEvidenceCounts(); refreshInterface(); showMessage("Demonstration data was reset successfully."); }
 
-setSelectOptions(); loadActions(); refreshInterface();
+setSelectOptions(); loadActions(); refreshInterface(); refreshEvidenceCounts();
 elements.search.addEventListener("input", render); elements.departmentFilter.addEventListener("change", render); elements.statusFilter.addEventListener("change", render);
 elements.clear.addEventListener("click", () => { elements.search.value = ""; elements.departmentFilter.value = ""; elements.statusFilter.value = ""; render(); elements.search.focus(); });
 elements.newAction.addEventListener("click", (event) => openForm(null, event.currentTarget)); elements.actionForm.addEventListener("submit", saveForm); elements.actionForm.addEventListener("input", () => { formDirty = true; }); elements.formClose.addEventListener("click", requestFormClose); elements.formCancel.addEventListener("click", requestFormClose); elements.actionDialog.addEventListener("cancel", (event) => { event.preventDefault(); requestFormClose(); }); elements.actionDialog.addEventListener("close", returnFocus);
 document.querySelector("#status").addEventListener("change", (event) => { document.querySelector("#closure-label").textContent = event.target.value === "Completed" ? "(required)" : "(optional)"; });
 elements.viewClose.addEventListener("click", () => elements.viewDialog.close()); elements.viewDone.addEventListener("click", () => elements.viewDialog.close()); elements.viewDialog.addEventListener("close", returnFocus);
 elements.traceClose.addEventListener("click", () => elements.traceDialog.close()); elements.traceDone.addEventListener("click", () => elements.traceDialog.close()); elements.traceDialog.addEventListener("close", () => { traceActionNumber = null; returnFocus(); }); elements.qualityCommentForm.addEventListener("submit", addQualityComment);
-elements.body.addEventListener("click", (event) => { const button = event.target.closest("button[data-command]"); if (!button) return; const action = actions.find((item) => item.number === button.dataset.number); if (!action) return; if (button.dataset.command === "view") openView(action, button); if (button.dataset.command === "edit") openForm(action, button); if (button.dataset.command === "trace") openTrace(action, button); if (button.dataset.command === "delete") deleteAction(action); });
+elements.evidenceClose.addEventListener("click", () => elements.evidenceDialog.close()); elements.evidenceDone.addEventListener("click", () => elements.evidenceDialog.close()); elements.evidenceDialog.addEventListener("close", () => { evidenceRecordId = null; returnFocus(); }); elements.evidenceForm.addEventListener("submit", uploadEvidence);
+elements.body.addEventListener("click", (event) => { const button = event.target.closest("button[data-command]"); if (!button) return; const action = actions.find((item) => item.id === button.dataset.recordId) || actions.find((item) => item.number === button.dataset.number); if (!action) return; if (button.dataset.command === "view") openView(action, button); if (button.dataset.command === "edit") openForm(action, button); if (button.dataset.command === "trace") openTrace(action, button); if (button.dataset.command === "delete") deleteAction(action); if (button.dataset.command === "evidence") openEvidence(action, button); });
 elements.exportCsv.addEventListener("click", exportCsv); elements.csvImport.addEventListener("change", importCsv); elements.backup.addEventListener("click", exportBackup); elements.importInput.addEventListener("change", importBackup); elements.reset.addEventListener("click", resetDemo); document.querySelector("#filter-form").addEventListener("submit", (event) => event.preventDefault());

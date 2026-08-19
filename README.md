@@ -1,6 +1,6 @@
-# QualityCore Internal Quality Action Tracker
+# QualityCore Tasks / Actions Tracker
 
-QualityCore is a dependency-free, browser-based demonstration tool for managing fictional quality actions. It provides an operational dashboard and action register while keeping records entirely in the current browser. The application uses only HTML, CSS, and vanilla JavaScript, so it can be opened directly, served locally, or published with GitHub Pages.
+QualityCore Tasks / Actions Tracker is a dependency-free, browser-based tool for managing task and action records. It provides an operational dashboard and register while keeping records and evidence entirely in the current browser. The application uses only HTML, CSS, and vanilla JavaScript, so it can be opened directly, served locally, or published with GitHub Pages.
 
 ## Features
 
@@ -14,8 +14,8 @@ QualityCore is a dependency-free, browser-based demonstration tool for managing 
 - Clear status and priority badges, explicit overdue labels, and responsive table scrolling
 - UTF-8 CSV export of the currently visible records, with spreadsheet-formula protection
 - Validated CSV batch import for action lists prepared in Excel
-- Versioned JSON backup export and validated, confirmed restoration
-- Browser `localStorage` persistence and confirmed demonstration-data reset
+- Versioned JSON backup export and validated, confirmed restoration, including evidence attachments
+- Record persistence in `localStorage`, evidence Blob storage in IndexedDB, and confirmed demonstration-data reset
 - Keyboard-friendly dialogs, focus management, live status messages, and reduced-motion support
 - Responsive layouts for desktop, tablet, and mobile screens
 
@@ -39,7 +39,7 @@ Then visit <http://localhost:8000>. Stop the server with <kbd>Ctrl</kbd>+<kbd>C<
 
 The project has no build step or remote dependencies. Configure GitHub Pages to publish the repository's `main` branch, then open the Pages URL shown in the repository settings. Each browser profile and site origin (for example, the Pages URL versus `localhost`) has separate storage.
 
-## Manage actions
+## Manage records
 
 ### Add, view, edit, and delete
 
@@ -66,6 +66,17 @@ Search updates as you type and covers action numbers, source information, descri
 
 An action is overdue only when its target date is before today and its status is not **Completed**. Open, In Progress, Under Review, and On Hold actions are counted as incomplete. Dashboard totals describe all stored actions, while the table and CSV export honor active filters.
 
+
+## Evidence attachments
+
+Every register row ends with **Evidence (N)**, where *N* is the current attachment count. Open it to see the related action number and description, choose one or more files, and optionally add a short evidence note. The dialog lists file name, type, size, attachment date, and note. Each file can be opened/previewed (subject to browser support), downloaded, or deleted after confirmation.
+
+Supported extensions are PDF, JPG/JPEG, PNG, DOC/DOCX, XLS/XLSX, CSV, and TXT. Each file is limited to **5 MB**. Unsupported and oversized selections are rejected with an on-screen message. Office-document preview depends on the browser and installed software; downloading remains available.
+
+Evidence is linked to a stable internal record ID, so editing record details or the displayed action number does not disconnect it. Deleting a record also deletes its evidence after the record deletion confirmation. Files are stored as Blobs in browser IndexedDB—never as binary data in `localStorage`.
+
+> **Evidence privacy notice:** Attachments remain in the current browser and device unless included in a JSON backup. Clearing browser/site data can permanently remove both records and evidence. This static application provides no authentication, server storage, encryption, multi-user access, or access control. Attach confidential company documents only when permitted by company policy.
+
 ## Export, restore, and reset
 
 ### CSV
@@ -82,15 +93,15 @@ CSV is a flat record format and does not carry target-date amendment history or 
 
 ### JSON backup
 
-Select **Export JSON Backup** to download every stored action, regardless of filters. The dated file includes backup version `1`, an ISO export timestamp, all action fields, target-date amendment history, and Quality comments. Export regular JSON backups, especially before clearing browser data, changing browsers, or resetting records.
+Select **Export JSON Backup** to download every stored record and evidence attachment, regardless of filters. Version 2 backups contain record fields, target-date amendment history, Quality comments, attachment metadata, notes, and base64-encoded file content. Evidence-inclusive JSON can be large because binary content grows when encoded. Export regular backups before clearing browser data, changing browsers, or resetting records. CSV remains record-data only and never includes attachments.
 
 ### JSON restoration
 
 1. Select **Import JSON Backup** and choose a `.json` backup.
 2. The application validates its version, structure, required fields, source/status/priority values, dates, data types, and unique action numbers.
-3. After successful validation, explicitly confirm replacement of the current dataset.
+3. Review the displayed record and attachment counts, then explicitly confirm replacement of the current browser dataset. Existing data is never silently overwritten.
 
-Malformed, incompatible, unsafe, or duplicate-number data is rejected without changing saved records. A successful import replaces all local actions and refreshes the interface immediately.
+Malformed, incompatible, unsafe, duplicate-number, unsupported, oversized, incorrectly encoded, or mismatched attachment data is rejected before changes are made. Older version 1 JSON backups without attachments remain supported and restore with zero evidence files. A successful confirmed import replaces the local records and attachments and refreshes the interface.
 
 ### Reset demonstration data
 
@@ -98,9 +109,9 @@ Select **Reset demo data** and read the confirmation warning. Confirming replace
 
 ## Browser storage and important limitations
 
-Records are stored under the versioned `localStorage` key `qualityCore.qaActionTracker.v1`. Demonstration records are written only when that key does not exist, so refreshes do not reload or duplicate them. Changes persist after refresh or reopening the same site in the same browser profile. Storage failures and corrupt saved data produce a visible recovery message; corrupt stored values are not silently overwritten.
+Record data is stored under the versioned `localStorage` key `qualityCore.qaActionTracker.v1`. Demonstration records are written only when that key does not exist, so refreshes do not reload or duplicate them. Changes persist after refresh or reopening the same site in the same browser profile. Storage failures and corrupt saved data produce a visible recovery message; corrupt stored values are not silently overwritten.
 
-`localStorage` is specific to the browser profile and site origin. Data saved on GitHub Pages is separate from data saved on `localhost`, another port, another browser, private browsing, or a directly opened file. Storage can also be unavailable or temporary under privacy settings. Clearing site/browser data, browser policies, device loss, or storage eviction can permanently delete records.
+`localStorage` is specific to the browser profile and site origin. Data saved on GitHub Pages is separate from data saved on `localhost`, another port, another browser, private browsing, or a directly opened file. Storage can also be unavailable or temporary under privacy settings. Evidence Blobs are stored separately in IndexedDB for the same origin. Clearing site/browser data, browser policies, device loss, private browsing, storage quotas, or storage eviction can permanently delete records and evidence.
 
 > **Data safety warning:** This application is a demonstration browser tool, not a secure central database, controlled QMS repository, or multi-user system. It has no authentication, authorization, encryption management, audit trail, server backup, synchronization, or regulatory controls. Do not enter confidential, personal, regulated, customer, production, or project-sensitive information without an appropriate secure backend and organizational approval. Data is never transmitted by this application, but anyone with access to the browser profile may be able to access it.
 
