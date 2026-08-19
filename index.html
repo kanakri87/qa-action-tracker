@@ -3,47 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="QualityCore browser-based internal quality action tracker">
-  <title>Internal Quality Action Tracker</title>
+  <meta name="description" content="QualityCore browser-based tasks and actions tracker">
+  <title>Tasks / Actions Tracker</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header"><div class="header-inner">
     <a class="brand" href="#main-content" aria-label="QualityCore dashboard home"><span class="brand-mark" aria-hidden="true">QC</span><span><strong>QualityCore</strong><small>Operational Excellence</small></span></a>
-    <div class="header-title"><p>Quality Management System</p><h1>Internal Quality Action Tracker</h1></div>
+    <div class="header-title"><p>Quality Management System</p><h1>Tasks / Actions Tracker</h1></div>
   </div></header>
 
   <main id="main-content" class="page-shell">
     <div id="message" class="message" role="status" aria-live="polite" hidden></div>
-    <section class="intro" aria-labelledby="dashboard-heading"><div><p class="eyebrow">Quality overview</p><h2 id="dashboard-heading">Action dashboard</h2><p>Monitor corrective actions, ownership, and delivery across the organization.</p></div><p class="as-of">Last refreshed <strong id="refresh-date"></strong></p></section>
-    <section class="summary-grid" aria-label="Action summary">
-      <article class="summary-card total-card"><span class="card-icon" aria-hidden="true">#</span><div><p>Total actions</p><strong id="total-count">0</strong><small>All saved records</small></div></article>
-      <article class="summary-card open-card"><span class="card-icon" aria-hidden="true">◷</span><div><p>Open actions</p><strong id="open-count">0</strong><small>All incomplete statuses</small></div></article>
-      <article class="summary-card overdue-card"><span class="card-icon" aria-hidden="true">!</span><div><p>Overdue actions</p><strong id="overdue-count">0</strong><small>Incomplete and past due</small></div></article>
-      <article class="summary-card complete-card"><span class="card-icon" aria-hidden="true">✓</span><div><p>Completed actions</p><strong id="completed-count">0</strong><small>Actions closed</small></div></article>
+    <section class="intro" aria-labelledby="dashboard-heading"><div><p class="eyebrow">Quality overview</p><h2 id="dashboard-heading">Tasks / Actions dashboard</h2><p>Monitor records, ownership, and delivery across the organization.</p></div><p class="as-of">Last refreshed <strong id="refresh-date"></strong></p></section>
+    <section class="summary-grid" aria-label="Record summary">
+      <article class="summary-card total-card"><span class="card-icon" aria-hidden="true">#</span><div><p>Total records</p><strong id="total-count">0</strong><small>All saved records</small></div></article>
+      <article class="summary-card open-card"><span class="card-icon" aria-hidden="true">◷</span><div><p>Open records</p><strong id="open-count">0</strong><small>All incomplete statuses</small></div></article>
+      <article class="summary-card overdue-card"><span class="card-icon" aria-hidden="true">!</span><div><p>Overdue records</p><strong id="overdue-count">0</strong><small>Incomplete and past due</small></div></article>
+      <article class="summary-card complete-card"><span class="card-icon" aria-hidden="true">✓</span><div><p>Completed records</p><strong id="completed-count">0</strong><small>Records closed</small></div></article>
     </section>
 
     <section class="quality-visual" aria-labelledby="quality-health-heading">
       <div class="quality-visual-heading">
-        <div><p class="eyebrow">Quality performance</p><h2 id="quality-health-heading">Action health at a glance</h2><p>Live status distribution and closure progress for the complete register.</p></div>
+        <div><p class="eyebrow">Quality performance</p><h2 id="quality-health-heading">Record health at a glance</h2><p>Live status distribution and closure progress for the complete register.</p></div>
         <div class="quality-score"><strong id="closure-rate">0%</strong><span>Closure rate</span></div>
       </div>
       <div class="quality-visual-grid">
-        <div class="quality-donut-wrap"><div class="status-donut" id="status-donut" role="img" aria-label="No actions available"><div><strong id="donut-total">0</strong><span>Actions</span></div></div></div>
+        <div class="quality-donut-wrap"><div class="status-donut" id="status-donut" role="img" aria-label="No records available"><div><strong id="donut-total">0</strong><span>Records</span></div></div></div>
         <div class="quality-legend" id="status-legend" aria-label="Status breakdown"></div>
         <div class="quality-focus">
           <span class="quality-focus-icon" aria-hidden="true">✓</span>
           <h3>Quality follow-up focus</h3>
-          <p id="quality-focus-text">Add actions to begin monitoring follow-up priorities.</p>
+          <p id="quality-focus-text">Add records to begin monitoring follow-up priorities.</p>
           <div class="quality-progress-heading"><span>Completion progress</span><strong id="completion-progress-label">0 of 0</strong></div>
-          <div class="quality-progress-track"><span id="completion-progress" role="progressbar" aria-label="Completed actions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></div>
+          <div class="quality-progress-track"><span id="completion-progress" role="progressbar" aria-label="Completed records" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></div>
         </div>
       </div>
     </section>
 
     <section class="tracker-panel" aria-labelledby="action-register-heading">
-      <div class="panel-heading"><div><h2 id="action-register-heading">Quality action register</h2><p id="record-count" aria-live="polite"></p></div>
-        <div class="management-toolbar" aria-label="Action register tools">
+      <div class="panel-heading"><div><h2 id="action-register-heading">Tasks / Actions register</h2><p id="record-count" aria-live="polite"></p></div>
+        <div class="management-toolbar" aria-label="Record register tools">
           <button class="button button-primary" id="new-button" type="button">+ New Action</button>
           <button class="button button-secondary" id="export-button" type="button">Export visible CSV</button>
           <label class="button button-secondary file-button" for="csv-import-input">Import CSV</label><input class="sr-only" id="csv-import-input" type="file" accept="text/csv,.csv">
@@ -53,12 +53,12 @@
         </div>
       </div>
       <form class="filter-bar" id="filter-form" role="search">
-        <div class="field search-field"><label for="search-input">Search actions</label><div class="input-wrap"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Action, source, owner, keyword…" autocomplete="off"></div></div>
+        <div class="field search-field"><label for="search-input">Search records</label><div class="input-wrap"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Action, source, owner, keyword…" autocomplete="off"></div></div>
         <div class="field"><label for="department-filter">Department</label><select id="department-filter"><option value="">All departments</option></select></div>
         <div class="field"><label for="status-filter">Status</label><select id="status-filter"><option value="">All statuses</option></select></div>
         <button class="button button-secondary" id="clear-button" type="button">Clear filters</button>
       </form>
-      <div class="table-wrap"><table><caption class="sr-only">Internal quality actions and their current status</caption><thead><tr><th scope="col">Action</th><th scope="col">Source</th><th scope="col">Description</th><th scope="col">Department</th><th scope="col">Owner</th><th scope="col">Target date</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Controls</th></tr></thead><tbody id="action-body"></tbody></table><div class="empty-state" id="empty-state" hidden><span aria-hidden="true">⌕</span><h3>No actions found</h3><p>Try changing or clearing your filters.</p></div></div>
+      <div class="table-wrap"><table><caption class="sr-only">Tasks and actions and their current status</caption><thead><tr><th scope="col">Action</th><th scope="col">Source</th><th scope="col">Description</th><th scope="col">Department</th><th scope="col">Owner</th><th scope="col">Target date</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Controls</th></tr></thead><tbody id="action-body"></tbody></table><div class="empty-state" id="empty-state" hidden><span aria-hidden="true">⌕</span><h3>No records found</h3><p>Try changing or clearing your filters.</p></div></div>
     </section>
     <p class="storage-note">Records stay in this browser only unless you export a backup. No information is sent to a server.</p>
   </main>
@@ -108,7 +108,22 @@
     </div>
     <div class="dialog-actions"><button class="button button-primary" id="trace-done" type="button">Close</button></div>
   </dialog>
-  <footer><p>QualityCore QMS <span aria-hidden="true">•</span> Browser-based action management</p><p class="powered-by">Powered by <strong>Anas Kanakri</strong></p></footer>
+  <dialog id="evidence-dialog" aria-labelledby="evidence-title" aria-describedby="evidence-record-description">
+    <div class="dialog-heading"><div><p class="eyebrow">Record attachments</p><h2 id="evidence-title">Evidence</h2></div><button class="icon-button" id="evidence-close" type="button" aria-label="Close Evidence dialog">×</button></div>
+    <div class="evidence-content">
+      <section class="evidence-record" aria-label="Related record"><strong id="evidence-record-number"></strong><p id="evidence-record-description"></p></section>
+      <form id="evidence-form" class="evidence-upload-form">
+        <div class="field"><label for="evidence-files">Choose evidence files</label><input id="evidence-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" required><small>PDF, JPG, PNG, DOC, DOCX, XLS, XLSX, CSV or TXT; maximum 5 MB per file.</small></div>
+        <div class="field"><label for="evidence-note">Evidence note <small>(optional, applies to selected files)</small></label><input id="evidence-note" maxlength="250" placeholder="Short description or context"></div>
+        <button class="button button-primary" type="submit">Attach selected files</button>
+      </form>
+      <p id="evidence-status" class="comment-notice" role="status" aria-live="polite"></p>
+      <section aria-labelledby="attached-evidence-heading"><div class="evidence-list-heading"><h3 id="attached-evidence-heading">Attached files</h3><span id="evidence-dialog-count" class="trace-count">0 files</span></div><div id="evidence-list" class="evidence-list"></div></section>
+      <aside class="evidence-notice"><strong>Browser storage and security notice</strong><p>Attachments remain on this browser and device unless included in a JSON backup. Clearing browser data can permanently remove records and evidence. This static application has no authentication, server storage, encryption, multi-user access, or access control. Attach confidential company documents only when company policy permits.</p></aside>
+    </div>
+    <div class="dialog-actions"><button class="button button-primary" id="evidence-done" type="button">Close</button></div>
+  </dialog>
+  <footer><p>QualityCore QMS <span aria-hidden="true">•</span> Browser-based record management</p><p class="powered-by">Powered by <strong>Anas Kanakri</strong></p></footer>
   <script src="app.js"></script>
 </body>
 </html>
