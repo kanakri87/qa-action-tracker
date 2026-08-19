@@ -7,9 +7,11 @@ QualityCore is a dependency-free, browser-based demonstration tool for managing 
 - Live totals for all, incomplete, overdue, and completed actions
 - Create and edit actions with accessible validation and automatic `QA-YYYY-NNN` numbering
 - Read-only action detail view and confirmed deletion
-- Immediate search across action content plus department and status filters
+- Immediate search across action content plus department, status, and dedicated **Overdue only** filters
+- Live quality-performance visualization with status distribution, closure rate, completion progress, and overdue follow-up guidance
 - Clear status and priority badges, explicit overdue labels, and responsive table scrolling
 - UTF-8 CSV export of the currently visible records, with spreadsheet-formula protection
+- Validated CSV batch import for action lists prepared in Excel
 - Versioned JSON backup export and validated, confirmed restoration
 - Browser `localStorage` persistence and confirmed demonstration-data reset
 - Keyboard-friendly dialogs, focus management, live status messages, and reduced-motion support
@@ -48,7 +50,7 @@ A completed action requires a closure date, and its closure date cannot be earli
 
 ### Search and filter
 
-Search updates as you type and covers action numbers, source information, descriptions, corrective actions, departments, owners, remarks, and effectiveness verification. Department and status filters can be combined with search. **Clear filters** restores the full register. The visible-record count and empty state update immediately.
+Search updates as you type and covers action numbers, source information, descriptions, corrective actions, departments, owners, remarks, and effectiveness verification. Department and status filters can be combined with search. Select **Overdue only** in the Status filter to isolate incomplete records whose target date is before today. **Clear filters** restores the full register. The visible-record count and empty state update immediately.
 
 An action is overdue only when its target date is before today and its status is not **Completed**. Open, In Progress, Under Review, and On Hold actions are counted as incomplete. Dashboard totals describe all stored actions, while the table and CSV export honor active filters.
 
@@ -57,6 +59,12 @@ An action is overdue only when its target date is before today and its status is
 ### CSV
 
 Select **Export visible CSV** to download only the records matching the active search and filters. The dated UTF-8 file includes all supported fields, escapes quotes and line breaks correctly, and neutralizes values that spreadsheet software could interpret as formulas.
+
+### CSV batch import
+
+Prepare the action list in Excel, save it as **CSV UTF-8 (Comma delimited)**, and select **Import CSV**. The importer accepts the same column headings produced by **Export visible CSV**. Action Number, Status, Priority, and Last Update may be blank: the app generates the next `QA-YYYY-NNN` number and defaults blank values to **Open**, **Medium**, and today. Dates may use `YYYY-MM-DD` or day-first `DD/MM/YYYY` / `DD-MM-YYYY`.
+
+The CSV must include Source, Action Description, Required Corrective Action, Responsible Department, Responsible Person, and Target Date. It validates every row, allowed source/status/priority values, dates, required fields, and duplicate action numbers before asking for confirmation. A successful import appends the validated rows; it never partially imports a file or replaces existing actions.
 
 ### JSON backup
 
@@ -88,4 +96,4 @@ Use fictional information for demonstrations and maintain regular exported JSON 
 
 - `index.html` — semantic dashboard, register, forms, and dialogs
 - `styles.css` — QualityCore visual system and responsive/accessibility styling
-- `app.js` — validation, persistence, CRUD, filtering, calculations, and exports
+- `app.js` — validation, persistence, CRUD, CSV/JSON import and export, filtering, calculations, and live visualization
