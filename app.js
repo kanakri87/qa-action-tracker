@@ -6,6 +6,8 @@ const SOURCES = ["Internal Audit", "NCR", "Customer Complaint", "Site Feedback",
 const STATUSES = ["Open", "In Progress", "Under Review", "On Hold", "Completed"];
 const PRIORITIES = ["High", "Medium", "Low"];
 const FIELDS = ["number", "source", "sourceReference", "description", "correctiveAction", "department", "person", "targetDate", "status", "priority", "lastUpdate", "remarks", "effectiveness", "closureDate"];
+const TRACE_FIELDS = ["targetDateHistory", "qualityComments"];
+const MAX_TRACE_ENTRIES = 2000;
 const REQUIRED = ["source", "description", "correctiveAction", "department", "person", "targetDate", "status", "priority"];
 const CSV_HEADINGS = ["Action Number", "Source", "Source Reference Number", "Action Description", "Required Corrective Action", "Responsible Department", "Responsible Person", "Target Date", "Status", "Priority", "Last Update", "Remarks or Evidence Reference", "Effectiveness Verification", "Closure Date"];
 const CSV_REQUIRED_FIELDS = ["source", "description", "correctiveAction", "department", "person", "targetDate"];
@@ -24,7 +26,7 @@ const STATUS_COLORS = { Open: "#4aa3df", "In Progress": "#f4b942", "Under Review
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const shiftDate = (days) => { const date = new Date(); date.setHours(12, 0, 0, 0); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); };
 const currentYear = new Date().getFullYear();
-const demo = (sequence, source, description, correctiveAction, department, person, offset, status, priority, extras = {}) => ({ number: `QA-${currentYear}-${String(sequence).padStart(3, "0")}`, source, sourceReference: extras.sourceReference || `DEMO-${String(sequence).padStart(3, "0")}`, description, correctiveAction, department, person, targetDate: shiftDate(offset), status, priority, lastUpdate: todayIso(), remarks: extras.remarks || "Fictional demonstration record.", effectiveness: extras.effectiveness || "", closureDate: status === "Completed" ? shiftDate(offset + 2) : "" });
+const demo = (sequence, source, description, correctiveAction, department, person, offset, status, priority, extras = {}) => ({ number: `QA-${currentYear}-${String(sequence).padStart(3, "0")}`, source, sourceReference: extras.sourceReference || `DEMO-${String(sequence).padStart(3, "0")}`, description, correctiveAction, department, person, targetDate: shiftDate(offset), status, priority, lastUpdate: todayIso(), remarks: extras.remarks || "Fictional demonstration record.", effectiveness: extras.effectiveness || "", closureDate: status === "Completed" ? shiftDate(offset + 2) : "", targetDateHistory: [], qualityComments: [] });
 const DEMO_ACTIONS = [
   demo(1, "Internal Audit", "Document the fictional supplier review workflow.", "Approve and publish a revised review checklist.", "Procurement", "Avery Stone", 25, "In Progress", "High"),
   demo(2, "NCR", "Investigate recurring demo label alignment findings.", "Complete a cause review and verify the setup guide.", "Operations", "Jordan Vale", -18, "Open", "High"),
@@ -36,17 +38,20 @@ const DEMO_ACTIONS = [
   demo(8, "EQM/ECAS", "Review fictional document access roles.", "Remove obsolete demo roles and document approval evidence.", "Information Systems", "Skyler Dawn", 70, "In Progress", "High")
 ];
 const elements = {
-  body: document.querySelector("#action-body"), search: document.querySelector("#search-input"), departmentFilter: document.querySelector("#department-filter"), statusFilter: document.querySelector("#status-filter"), clear: document.querySelector("#clear-button"), exportCsv: document.querySelector("#export-button"), csvImport: document.querySelector("#csv-import-input"), backup: document.querySelector("#backup-button"), importInput: document.querySelector("#import-input"), reset: document.querySelector("#reset-button"), newAction: document.querySelector("#new-button"), empty: document.querySelector("#empty-state"), recordCount: document.querySelector("#record-count"), total: document.querySelector("#total-count"), open: document.querySelector("#open-count"), overdue: document.querySelector("#overdue-count"), completed: document.querySelector("#completed-count"), message: document.querySelector("#message"), actionDialog: document.querySelector("#action-dialog"), actionForm: document.querySelector("#action-form"), formTitle: document.querySelector("#form-title"), formClose: document.querySelector("#form-close"), formCancel: document.querySelector("#form-cancel"), viewDialog: document.querySelector("#view-dialog"), viewTitle: document.querySelector("#view-title"), detailList: document.querySelector("#detail-list"), viewClose: document.querySelector("#view-close"), viewDone: document.querySelector("#view-done"), closureRate: document.querySelector("#closure-rate"), statusDonut: document.querySelector("#status-donut"), donutTotal: document.querySelector("#donut-total"), statusLegend: document.querySelector("#status-legend"), qualityFocus: document.querySelector("#quality-focus-text"), completionProgress: document.querySelector("#completion-progress"), completionProgressLabel: document.querySelector("#completion-progress-label")
+  body: document.querySelector("#action-body"), search: document.querySelector("#search-input"), departmentFilter: document.querySelector("#department-filter"), statusFilter: document.querySelector("#status-filter"), clear: document.querySelector("#clear-button"), exportCsv: document.querySelector("#export-button"), csvImport: document.querySelector("#csv-import-input"), backup: document.querySelector("#backup-button"), importInput: document.querySelector("#import-input"), reset: document.querySelector("#reset-button"), newAction: document.querySelector("#new-button"), empty: document.querySelector("#empty-state"), recordCount: document.querySelector("#record-count"), total: document.querySelector("#total-count"), open: document.querySelector("#open-count"), overdue: document.querySelector("#overdue-count"), completed: document.querySelector("#completed-count"), message: document.querySelector("#message"), actionDialog: document.querySelector("#action-dialog"), actionForm: document.querySelector("#action-form"), formTitle: document.querySelector("#form-title"), formClose: document.querySelector("#form-close"), formCancel: document.querySelector("#form-cancel"), viewDialog: document.querySelector("#view-dialog"), viewTitle: document.querySelector("#view-title"), detailList: document.querySelector("#detail-list"), viewClose: document.querySelector("#view-close"), viewDone: document.querySelector("#view-done"), traceDialog: document.querySelector("#trace-dialog"), traceTitle: document.querySelector("#trace-title"), traceClose: document.querySelector("#trace-close"), traceDone: document.querySelector("#trace-done"), targetHistoryCount: document.querySelector("#target-history-count"), targetHistoryList: document.querySelector("#target-history-list"), qualityCommentsCount: document.querySelector("#quality-comments-count"), qualityCommentsList: document.querySelector("#quality-comments-list"), qualityCommentForm: document.querySelector("#quality-comment-form"), qualityCommentInput: document.querySelector("#quality-comment-input"), qualityCommentError: document.querySelector("#quality-comment-error"), qualityCommentNotice: document.querySelector("#quality-comment-notice"), closureRate: document.querySelector("#closure-rate"), statusDonut: document.querySelector("#status-donut"), donutTotal: document.querySelector("#donut-total"), statusLegend: document.querySelector("#status-legend"), qualityFocus: document.querySelector("#quality-focus-text"), completionProgress: document.querySelector("#completion-progress"), completionProgressLabel: document.querySelector("#completion-progress-label")
 };
 let actions = [];
 let visibleActions = [];
 let editingNumber = null;
 let formDirty = false;
 let dialogOpener = null;
+let traceActionNumber = null;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`));
 const formatDate = (value) => value && validDate(value) ? new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`)) : "—";
+const formatDateTime = (value) => value && !Number.isNaN(Date.parse(value)) ? new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "Unknown time";
+const makeTraceId = () => globalThis.crypto?.randomUUID?.() || `trace-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const isOverdue = (action) => action.status !== "Completed" && action.targetDate < todayIso();
 const showMessage = (text, error = false) => { elements.message.textContent = text; elements.message.classList.toggle("error", error); elements.message.hidden = false; elements.message.scrollIntoView({ block: "nearest" }); };
 const clearMessage = () => { elements.message.hidden = true; elements.message.textContent = ""; };
@@ -68,6 +73,21 @@ function validateAction(action, options = {}) {
   return errors;
 }
 
+function validateTraceData(raw, actionIndex) {
+  const validateList = (field, entryFields, validator) => {
+    const value = raw[field]; if (value === undefined) return []; if (!Array.isArray(value)) throw new Error(`Action ${actionIndex + 1}: ${field} must be an array.`); if (value.length > MAX_TRACE_ENTRIES) throw new Error(`Action ${actionIndex + 1}: ${field} contains too many entries.`);
+    const ids = new Set();
+    return value.map((entry, entryIndex) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error(`Action ${actionIndex + 1}: ${field} entry ${entryIndex + 1} is invalid.`);
+      const normalized = {}; entryFields.forEach((name) => { if (typeof entry[name] !== "string") throw new Error(`Action ${actionIndex + 1}: ${field} entry ${entryIndex + 1} ${name} must be text.`); normalized[name] = entry[name].trim(); });
+      if (!normalized.id || ids.has(normalized.id)) throw new Error(`Action ${actionIndex + 1}: ${field} contains a missing or duplicate entry ID.`); ids.add(normalized.id); validator(normalized, entryIndex); return normalized;
+    });
+  };
+  const targetDateHistory = validateList("targetDateHistory", ["id", "changedAt", "previousDate", "newDate"], (entry, entryIndex) => { if (Number.isNaN(Date.parse(entry.changedAt))) throw new Error(`Action ${actionIndex + 1}: target date amendment ${entryIndex + 1} has an invalid timestamp.`); if (!validDate(entry.previousDate) || !validDate(entry.newDate)) throw new Error(`Action ${actionIndex + 1}: target date amendment ${entryIndex + 1} has an invalid date.`); });
+  const qualityComments = validateList("qualityComments", ["id", "createdAt", "author", "text"], (entry, entryIndex) => { if (Number.isNaN(Date.parse(entry.createdAt))) throw new Error(`Action ${actionIndex + 1}: Quality comment ${entryIndex + 1} has an invalid timestamp.`); if (!entry.author || !entry.text) throw new Error(`Action ${actionIndex + 1}: Quality comment ${entryIndex + 1} is incomplete.`); if (entry.text.length > 1500) throw new Error(`Action ${actionIndex + 1}: Quality comment ${entryIndex + 1} is too long.`); });
+  return { targetDateHistory, qualityComments };
+}
+
 function validateDataset(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Backup must contain a JSON object.");
   if (data.version !== BACKUP_VERSION) throw new Error(`Unsupported backup version. Expected version ${BACKUP_VERSION}.`);
@@ -77,7 +97,7 @@ function validateDataset(data) {
   const normalized = data.actions.map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`Action ${index + 1} is not a valid record.`);
     for (const field of FIELDS) if (raw[field] !== undefined && typeof raw[field] !== "string") throw new Error(`Action ${index + 1}: ${field} must be text.`);
-    const action = normalizeAction(raw);
+    const action = { ...normalizeAction(raw), ...validateTraceData(raw, index) };
     const errors = validateAction(action, { existingNumbers: numbers });
     if (errors.length) throw new Error(`Action ${index + 1} (${action.number || "no number"}): ${errors[0].message}`);
     numbers.add(action.number);
@@ -157,10 +177,11 @@ function render() {
     const row = document.createElement("tr"); if (isOverdue(action)) row.className = "overdue";
     makeCell(row, action.number, "action-number"); makeCell(row, action.source); makeCell(row, action.description, "description"); makeCell(row, action.department); makeCell(row, action.person);
     const target = makeCell(row, formatDate(action.targetDate), "date"); if (isOverdue(action)) { const label = document.createElement("span"); label.className = "overdue-label"; label.textContent = "Overdue"; target.append(label); }
+    const amendmentCount = action.targetDateHistory?.length || 0; const amendmentButton = document.createElement("button"); amendmentButton.type = "button"; amendmentButton.className = "amendment-link"; amendmentButton.dataset.command = "trace"; amendmentButton.dataset.number = action.number; amendmentButton.textContent = `${amendmentCount} amendment${amendmentCount === 1 ? "" : "s"}`; amendmentButton.setAttribute("aria-label", `Open target date history for ${action.number}; ${amendmentCount} amendment${amendmentCount === 1 ? "" : "s"}`); target.append(amendmentButton);
     const statusCell = makeCell(row, ""); addBadge(statusCell, action.status, `status-${({ Open: "open", "In Progress": "progress", "Under Review": "review", "On Hold": "hold", Completed: "completed" })[action.status]}`);
     const priorityCell = makeCell(row, ""); addBadge(priorityCell, action.priority, `priority-${action.priority.toLowerCase()}`);
     const controls = makeCell(row, ""); controls.className = "row-actions";
-    [["View", "view"], ["Edit", "edit"], ["Delete", "delete"]].forEach(([label, command]) => { const button = document.createElement("button"); button.type = "button"; button.className = `row-button ${command === "delete" ? "delete" : ""}`; button.textContent = label; button.dataset.command = command; button.dataset.number = action.number; button.setAttribute("aria-label", `${label} ${action.number}`); controls.append(button); });
+    [["View", "view"], ["Edit", "edit"], [`Comments (${action.qualityComments?.length || 0})`, "trace"], ["Delete", "delete"]].forEach(([label, command]) => { const button = document.createElement("button"); button.type = "button"; button.className = `row-button ${command === "delete" ? "delete" : ""} ${command === "trace" ? "trace" : ""}`; button.textContent = label; button.dataset.command = command; button.dataset.number = action.number; button.setAttribute("aria-label", `${command === "trace" ? "Open traceability for" : label} ${action.number}`); controls.append(button); });
     elements.body.append(row);
   });
   elements.total.textContent = actions.length; elements.open.textContent = actions.filter((action) => action.status !== "Completed").length; elements.overdue.textContent = actions.filter(isOverdue).length; elements.completed.textContent = actions.filter((action) => action.status === "Completed").length; renderQualityVisual();
@@ -179,17 +200,38 @@ function openForm(action = null, opener = document.activeElement) {
 }
 function requestFormClose() { if (formDirty && !window.confirm("Close without saving? Your unsaved changes will be lost.")) return; elements.actionDialog.close(); }
 function returnFocus() { if (dialogOpener?.isConnected) dialogOpener.focus(); dialogOpener = null; }
+function applyTraceability(action, previous = null) {
+  action.targetDateHistory = clone(previous?.targetDateHistory || []); action.qualityComments = clone(previous?.qualityComments || []);
+  if (previous && previous.targetDate !== action.targetDate) { action.targetDateHistory.push({ id: makeTraceId(), changedAt: new Date().toISOString(), previousDate: previous.targetDate, newDate: action.targetDate }); return true; }
+  return false;
+}
 function saveForm(event) {
   event.preventDefault(); clearFormErrors(); const action = readForm(); const errors = validateAction(action);
   if (errors.length) { errors.forEach(({ field, message }) => { const input = elements.actionForm.elements[field]; if (!input) return; input.setAttribute("aria-invalid", "true"); input.setAttribute("aria-describedby", `${field}-error`); const error = document.querySelector(`#${field}-error`); if (error) error.textContent = message; }); elements.actionForm.elements[errors[0].field]?.focus(); return; }
-  const next = clone(actions); if (editingNumber) { const index = next.findIndex((item) => item.number === editingNumber); if (index < 0) { showMessage("This action no longer exists.", true); return; } next[index] = action; } else next.push(action);
-  if (!persist(next)) return; actions = next; formDirty = false; elements.actionDialog.close(); refreshInterface(); showMessage(`${action.number} was ${editingNumber ? "updated" : "created"}.`);
+  const next = clone(actions); let amendmentRecorded = false;
+  if (editingNumber) { const index = next.findIndex((item) => item.number === editingNumber); if (index < 0) { showMessage("This action no longer exists.", true); return; } amendmentRecorded = applyTraceability(action, next[index]); next[index] = action; }
+  else { applyTraceability(action); next.push(action); }
+  if (!persist(next)) return; actions = next; formDirty = false; elements.actionDialog.close(); refreshInterface(); showMessage(`${action.number} was ${editingNumber ? "updated" : "created"}.${amendmentRecorded ? " The target date amendment was added to its traceability history." : ""}`);
 }
 function openView(action, opener) {
   dialogOpener = opener; elements.viewTitle.textContent = action.number; elements.detailList.replaceChildren(); const labels = { number: "Action number", source: "Source", sourceReference: "Source reference number", description: "Action description", correctiveAction: "Required corrective action", department: "Responsible department", person: "Responsible person", targetDate: "Target date", status: "Status", priority: "Priority", lastUpdate: "Last update", remarks: "Remarks or evidence reference", effectiveness: "Effectiveness verification", closureDate: "Closure date" };
   FIELDS.forEach((field) => { const wrapper = document.createElement("div"); if (["description", "correctiveAction", "remarks", "effectiveness"].includes(field)) wrapper.className = "wide"; const term = document.createElement("dt"), detail = document.createElement("dd"); term.textContent = labels[field]; detail.textContent = ["targetDate", "lastUpdate", "closureDate"].includes(field) ? formatDate(action[field]) : action[field] || "—"; wrapper.append(term, detail); elements.detailList.append(wrapper); }); elements.viewDialog.showModal(); elements.viewDone.focus();
 }
-function deleteAction(action) { if (!window.confirm(`Delete ${action.number}? This action cannot be undone.`)) return; const next = actions.filter((item) => item.number !== action.number); if (!persist(next)) return; actions = next; refreshInterface(); showMessage(`${action.number} was deleted.`); }
+function createTraceItem(title, meta, body, comment = false) { const item = document.createElement("article"); item.className = `trace-item${comment ? " comment" : ""}`; const heading = document.createElement("h4"); heading.textContent = title; const metadata = document.createElement("p"); metadata.className = "trace-meta"; metadata.textContent = meta; const content = document.createElement("div"); content.className = "trace-body"; if (body instanceof Node) content.append(body); else content.textContent = body; item.append(heading, metadata, content); return item; }
+function renderTrace(action) {
+  const history = action.targetDateHistory || [], comments = action.qualityComments || []; elements.traceTitle.textContent = `Traceability — ${action.number}`; elements.targetHistoryCount.textContent = `${history.length} amendment${history.length === 1 ? "" : "s"}`; elements.qualityCommentsCount.textContent = `${comments.length} comment${comments.length === 1 ? "" : "s"}`;
+  elements.targetHistoryList.replaceChildren(); if (!history.length) { const empty = document.createElement("p"); empty.className = "trace-empty"; empty.textContent = "No target date amendments have been recorded. Tracking begins with the next target date change."; elements.targetHistoryList.append(empty); } else history.slice().reverse().forEach((entry) => { const dates = document.createElement("div"); dates.className = "trace-date-change"; const oldDate = document.createElement("span"); oldDate.className = "trace-date-old"; oldDate.textContent = formatDate(entry.previousDate); const arrow = document.createElement("span"); arrow.className = "trace-arrow"; arrow.textContent = "→"; arrow.setAttribute("aria-hidden", "true"); const newDate = document.createElement("span"); newDate.className = "trace-date-new"; newDate.textContent = formatDate(entry.newDate); dates.append(oldDate, arrow, newDate); elements.targetHistoryList.append(createTraceItem("Target date amended", formatDateTime(entry.changedAt), dates)); });
+  elements.qualityCommentsList.replaceChildren(); if (!comments.length) { const empty = document.createElement("p"); empty.className = "trace-empty"; empty.textContent = "No Quality comments have been recorded for this action."; elements.qualityCommentsList.append(empty); } else comments.slice().reverse().forEach((entry) => elements.qualityCommentsList.append(createTraceItem("Quality comment", `${entry.author} • ${formatDateTime(entry.createdAt)}`, entry.text, true)));
+}
+function openTrace(action, opener) { traceActionNumber = action.number; dialogOpener = opener; elements.qualityCommentInput.value = ""; elements.qualityCommentInput.removeAttribute("aria-invalid"); elements.qualityCommentError.textContent = ""; elements.qualityCommentNotice.textContent = ""; renderTrace(action); elements.traceDialog.showModal(); elements.traceClose.focus(); }
+function addQualityComment(event) {
+  event.preventDefault(); const text = elements.qualityCommentInput.value.trim(); elements.qualityCommentError.textContent = ""; elements.qualityCommentNotice.textContent = ""; elements.qualityCommentInput.removeAttribute("aria-invalid");
+  if (!text) { elements.qualityCommentInput.setAttribute("aria-invalid", "true"); elements.qualityCommentError.textContent = "Enter a Quality comment before saving."; elements.qualityCommentInput.focus(); return; }
+  const next = clone(actions); const index = next.findIndex((action) => action.number === traceActionNumber); if (index < 0) { elements.qualityCommentError.textContent = "This action no longer exists."; return; }
+  next[index].targetDateHistory = next[index].targetDateHistory || []; next[index].qualityComments = next[index].qualityComments || []; next[index].qualityComments.push({ id: makeTraceId(), createdAt: new Date().toISOString(), author: "Quality", text }); next[index].lastUpdate = todayIso();
+  if (!persist(next)) return; actions = next; refreshInterface(); elements.qualityCommentInput.value = ""; renderTrace(actions[index]); elements.qualityCommentNotice.textContent = "Quality comment saved with its date and time."; elements.qualityCommentInput.focus();
+}
+function deleteAction(action) { if (!window.confirm(`Delete ${action.number}? Its target date history and Quality comments will also be deleted. This cannot be undone.`)) return; const next = actions.filter((item) => item.number !== action.number); if (!persist(next)) return; actions = next; refreshInterface(); showMessage(`${action.number} was deleted.`); }
 
 function parseCsv(text) {
   const rows = []; let row = [], field = "", quoted = false;
@@ -229,7 +271,7 @@ function csvRowsToActions(text) {
   rows.slice(1).forEach((row, rowIndex) => {
     const raw = Object.fromEntries(FIELDS.map((field) => [field, indexes[field] === undefined ? "" : String(row[indexes[field]] ?? "")]));
     raw.number = raw.number.trim() || generateNumber([...actions, ...imported]); raw.status = raw.status.trim() || "Open"; raw.priority = raw.priority.trim() || "Medium"; raw.lastUpdate = normalizeCsvDate(raw.lastUpdate) || todayIso(); raw.targetDate = normalizeCsvDate(raw.targetDate); raw.closureDate = normalizeCsvDate(raw.closureDate);
-    const action = normalizeAction(raw); const errors = validateAction(action, { existingNumbers: numbers });
+    const action = normalizeAction(raw); action.targetDateHistory = []; action.qualityComments = []; const errors = validateAction(action, { existingNumbers: numbers });
     if (errors.length) { const error = errors[0]; throw new Error(`CSV row ${rowIndex + 2} (${action.number || "no number"}), ${CSV_HEADINGS[FIELDS.indexOf(error.field)] || error.field}: ${error.message}`); }
     numbers.add(action.number); imported.push(action);
   });
@@ -260,5 +302,6 @@ elements.clear.addEventListener("click", () => { elements.search.value = ""; ele
 elements.newAction.addEventListener("click", (event) => openForm(null, event.currentTarget)); elements.actionForm.addEventListener("submit", saveForm); elements.actionForm.addEventListener("input", () => { formDirty = true; }); elements.formClose.addEventListener("click", requestFormClose); elements.formCancel.addEventListener("click", requestFormClose); elements.actionDialog.addEventListener("cancel", (event) => { event.preventDefault(); requestFormClose(); }); elements.actionDialog.addEventListener("close", returnFocus);
 document.querySelector("#status").addEventListener("change", (event) => { document.querySelector("#closure-label").textContent = event.target.value === "Completed" ? "(required)" : "(optional)"; });
 elements.viewClose.addEventListener("click", () => elements.viewDialog.close()); elements.viewDone.addEventListener("click", () => elements.viewDialog.close()); elements.viewDialog.addEventListener("close", returnFocus);
-elements.body.addEventListener("click", (event) => { const button = event.target.closest("button[data-command]"); if (!button) return; const action = actions.find((item) => item.number === button.dataset.number); if (!action) return; if (button.dataset.command === "view") openView(action, button); if (button.dataset.command === "edit") openForm(action, button); if (button.dataset.command === "delete") deleteAction(action); });
+elements.traceClose.addEventListener("click", () => elements.traceDialog.close()); elements.traceDone.addEventListener("click", () => elements.traceDialog.close()); elements.traceDialog.addEventListener("close", () => { traceActionNumber = null; returnFocus(); }); elements.qualityCommentForm.addEventListener("submit", addQualityComment);
+elements.body.addEventListener("click", (event) => { const button = event.target.closest("button[data-command]"); if (!button) return; const action = actions.find((item) => item.number === button.dataset.number); if (!action) return; if (button.dataset.command === "view") openView(action, button); if (button.dataset.command === "edit") openForm(action, button); if (button.dataset.command === "trace") openTrace(action, button); if (button.dataset.command === "delete") deleteAction(action); });
 elements.exportCsv.addEventListener("click", exportCsv); elements.csvImport.addEventListener("change", importCsv); elements.backup.addEventListener("click", exportBackup); elements.importInput.addEventListener("change", importBackup); elements.reset.addEventListener("click", resetDemo); document.querySelector("#filter-form").addEventListener("submit", (event) => event.preventDefault());
