@@ -7,6 +7,8 @@ QualityCore is a dependency-free, browser-based demonstration tool for managing 
 - Live totals for all, incomplete, overdue, and completed actions
 - Create and edit actions with accessible validation and automatic `QA-YYYY-NNN` numbering
 - Read-only action detail view and confirmed deletion
+- Timestamped target-date amendment history with a per-action amendment count
+- Append-only, timestamped Quality comments shown in an accessible traceability timeline
 - Immediate search across action content plus department, status, and dedicated **Overdue only** filters
 - Live quality-performance visualization with status distribution, closure rate, completion progress, and overdue follow-up guidance
 - Clear status and priority badges, explicit overdue labels, and responsive table scrolling
@@ -48,6 +50,16 @@ The project has no build step or remote dependencies. Configure GitHub Pages to 
 
 A completed action requires a closure date, and its closure date cannot be earlier than its target date. Closing a changed form prompts before discarding unsaved information.
 
+### Target-date history and Quality comments
+
+Whenever an existing action is saved with a different Target Date, the application records the previous date, new date, and exact amendment timestamp. The register shows the number of amendments under each target date. Select that count—or the action's **Comments** control—to open the vertical traceability timeline.
+
+The same traceability dialog includes an append-only **Quality comment** field. Each comment is stored with the author label **Quality** and its exact date and time. Comments cannot be edited or deleted individually in the interface. Deleting the complete action also deletes its traceability history after confirmation.
+
+Existing records and older backups begin with zero historical amendments because the application cannot reconstruct changes made before this feature was installed. Tracking starts with the first future target-date change.
+
+> **Traceability limitation:** This is operational browser traceability, not a tamper-proof regulated audit trail. Anyone who can alter browser storage or import a modified JSON backup may alter the data. Use an approved authenticated server and controlled database when formal QMS audit-trail requirements apply.
+
 ### Search and filter
 
 Search updates as you type and covers action numbers, source information, descriptions, corrective actions, departments, owners, remarks, and effectiveness verification. Department and status filters can be combined with search. Select **Overdue only** in the Status filter to isolate incomplete records whose target date is before today. **Clear filters** restores the full register. The visible-record count and empty state update immediately.
@@ -66,9 +78,11 @@ Prepare the action list in Excel, save it as **CSV UTF-8 (Comma delimited)**, an
 
 The CSV must include Source, Action Description, Required Corrective Action, Responsible Department, Responsible Person, and Target Date. It validates every row, allowed source/status/priority values, dates, required fields, and duplicate action numbers before asking for confirmation. A successful import appends the validated rows; it never partially imports a file or replaces existing actions.
 
+CSV is a flat record format and does not carry target-date amendment history or Quality comments. New CSV-imported actions start with empty traceability timelines. Use JSON backup for complete preservation of actions and their nested traceability data.
+
 ### JSON backup
 
-Select **Export JSON Backup** to download every stored action, regardless of filters. The dated file includes backup version `1`, an ISO export timestamp, and all action fields. Export regular JSON backups, especially before clearing browser data, changing browsers, or resetting records.
+Select **Export JSON Backup** to download every stored action, regardless of filters. The dated file includes backup version `1`, an ISO export timestamp, all action fields, target-date amendment history, and Quality comments. Export regular JSON backups, especially before clearing browser data, changing browsers, or resetting records.
 
 ### JSON restoration
 
@@ -96,4 +110,4 @@ Use fictional information for demonstrations and maintain regular exported JSON 
 
 - `index.html` — semantic dashboard, register, forms, and dialogs
 - `styles.css` — QualityCore visual system and responsive/accessibility styling
-- `app.js` — validation, persistence, CRUD, CSV/JSON import and export, filtering, calculations, and live visualization
+- `app.js` — validation, persistence, CRUD, CSV/JSON import and export, filtering, calculations, live visualization, and action traceability
