@@ -9,10 +9,10 @@ QualityCore Tasks / Actions Tracker is a dependency-free, browser-based tool for
 - Read-only action detail view and confirmed deletion
 - Timestamped target-date amendment history with a per-action amendment count
 - Append-only, timestamped Quality comments shown in an accessible traceability timeline
-- Immediate search across action content plus department, status, and dedicated **Overdue only** filters
+- Immediate search plus accessible multi-select Source, Department, and Status filters and an independent **Overdue only** filter
 - Live quality-performance visualization with status distribution, closure rate, completion progress, and overdue follow-up guidance
 - Clear status and priority badges, explicit overdue labels, and responsive table scrolling
-- UTF-8 CSV export of the currently visible records, with spreadsheet-formula protection
+- UTF-8 CSV and print-to-PDF reports of the currently visible records, with spreadsheet-formula protection for CSV
 - Validated CSV batch import for action lists prepared in Excel
 - Versioned JSON backup export and validated, confirmed restoration, including evidence attachments
 - Record persistence in `localStorage`, evidence Blob storage in IndexedDB, and confirmed demonstration-data reset
@@ -62,9 +62,11 @@ Existing records and older backups begin with zero historical amendments because
 
 ### Search and filter
 
-Search updates as you type and covers action numbers, source information, descriptions, corrective actions, departments, owners, remarks, and effectiveness verification. Department and status filters can be combined with search. Select **Overdue only** in the Status filter to isolate incomplete records whose target date is before today. **Clear filters** restores the full register. The visible-record count and empty state update immediately.
+Search updates as you type and covers action numbers, source information, descriptions, corrective actions, departments, owners, remarks, and effectiveness verification. **Source**, **Department**, and **Status** are touch-friendly multi-select dropdowns: open a dropdown, check one or more values, or use **Select all** and **Clear selection**. The closed control shows **All** when nothing is selected, one selected name, or a selected count. Selected chips can remove one value while retaining the others on wider screens.
 
-An action is overdue only when its target date is before today and its status is not **Completed**. Open, In Progress, Under Review, and On Hold actions are counted as incomplete. Dashboard totals describe all stored actions, while the table and CSV export honor active filters.
+Selections within one category use **OR** logic (for example, NCR *or* Customer Complaint). Categories combine with **AND** logic, so Source, Department, Status, search, and **Overdue only** must all match. Source choices follow the configured order and also include valid values found in loaded records. Changes immediately update the register, visible count, dashboard visualization and metrics, CSV output, and PDF report. Press <kbd>Escape</kbd> or click outside to close a dropdown; standard Tab, Shift+Tab, Space, and Enter controls remain available to keyboard users.
+
+**Overdue only** is independent of Status and includes only incomplete records with target dates before today. Completed actions are never overdue. **Clear filters** clears search, all three multi-select categories, and Overdue only. A clear empty state is shown when nothing matches. Dashboard metrics describe the current filtered result set, as do visible CSV and PDF exports.
 
 
 ## Evidence attachments
@@ -78,6 +80,12 @@ Evidence is linked to a stable internal record ID, so editing record details or 
 > **Evidence privacy notice:** Attachments remain in the current browser and device unless included in a JSON backup. Clearing browser/site data can permanently remove both records and evidence. This static application provides no authentication, server storage, encryption, multi-user access, or access control. Attach confidential company documents only when permitted by company policy.
 
 ## Export, restore, and reset
+
+### PDF report
+
+Select **Export PDF Report** to create a dedicated **Tasks / Actions Tracker — Filtered Results Report** from only the currently visible records. The report includes its generation time, applied filters, record count, filtered summary totals, the requested action fields, and evidence *counts* only. It does **not** embed or expose binary evidence files. If no records are visible, the application prevents an empty report and displays an accessible message.
+
+The button opens a new print view and the browser print dialog; choose **Save as PDF** as the printer/destination. The view uses A4 landscape print styling, repeating headers where supported, non-splitting rows where practical, and wrapped descriptions. Desktop versions of current Edge, Chrome, Firefox, and Safari provide the most predictable output. Mobile printing depends on the device, browser, available print service, and pop-up settings; some mobile browsers may not offer Save as PDF or may paginate differently. Allow pop-ups for the application if the report window is blocked. Printing never changes records or active filters.
 
 ### CSV
 
